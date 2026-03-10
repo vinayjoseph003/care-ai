@@ -1,0 +1,23 @@
+# Virtual environment — never push (500MB+)
+venv/
+
+# Cache folder — rebuilds automatically on each machine
+cache/
+
+# API keys — NEVER push your .env
+.env
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+logs/
+
+# VS Code settings
+.vscode/
+
+# OS junk files
+.DS_Store
+Thumbs.db

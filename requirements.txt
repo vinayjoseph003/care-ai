@@ -1,0 +1,4 @@
+groq
+numpy
+pandas
+python-dotenv
