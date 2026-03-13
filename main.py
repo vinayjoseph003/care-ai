@@ -22,10 +22,11 @@ def main():
     print("  Commands  : reset | log | export | severity | quit")
     print("=" * 58 + "\n")
 
-    # ── Load ALL knowledge sources ──
-    all_chunks, severity_map = build_all_chunks(data_dir="data")
+    # ── Load ALL knowledge sources ──────────────────────────
+    # build_all_chunks now returns 3 values (precaution_map is new)
+    all_chunks, severity_map, precaution_map = build_all_chunks(data_dir="data")
 
-    # ── Initialize bot ──
+    # ── Initialize bot ───────────────────────────────────────
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
         print("❌ GROQ_API_KEY not found. Add it to your .env file.")
@@ -35,15 +36,16 @@ def main():
         knowledge_chunks=all_chunks,
         severity_map=severity_map,
         api_key=api_key,
+        precaution_map=precaution_map,   # ← [NEW]
     )
 
-    # ── Greeting ──
+    # ── Greeting ─────────────────────────────────────────────
     print("Care-AI: Hello! I'm Care-AI, your medical information assistant.")
     print("         I'll ask a few questions before giving you information.")
     print("         You can talk to me in any language.")
     print("         How can I help you today?\n")
 
-    # ── Main loop ──
+    # ── Main loop ─────────────────────────────────────────────
     while True:
         try:
             user_input = input("You: ").strip()

@@ -1,10 +1,7 @@
 # ================================================================
 #  core/knowledge_base.py  — UNIFIED VERSION
-#  Loads and parses all 4 data sources into RAG-ready chunks:
-#  1. Your 4 CSVs     (disease-symptom mapping)
-#  2. MedQuAD CSVs   (10 medical Q&A files)
-#  3. MedlinePlus XML (health topic explanations)
-#  4. ICD-10 TXT     (77k disease code descriptions)
+#  ✅ [NEW] build_precaution_map() added
+#  ✅ [NEW] build_all_chunks() now returns (chunks, sev_map, prec_map)
 # ================================================================
 
 import os
@@ -14,9 +11,6 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 
 
-# ──────────────────────────────────────────────────────────────
-#  SHARED UTILITIES
-# ──────────────────────────────────────────────────────────────
 def _get_col(df, keyword):
     for c in df.columns:
         if keyword.lower() in c.lower():
@@ -30,9 +24,6 @@ def _clean(text):
     return re.sub(r'\s+', ' ', str(text).strip())
 
 
-# ──────────────────────────────────────────────────────────────
-#  1. LOAD YOUR 4 CSVs
-# ──────────────────────────────────────────────────────────────
 def load_datasets(data_dir: str = "data") -> dict:
     paths = {
         "symptoms":    os.path.join(data_dir, "dataset.csv"),
@@ -61,14 +52,40 @@ def _extract_symptoms(row, cols) -> list:
     return syms
 
 
+# ── [NEW] PRECAUTION MAP BUILDER ─────────────────────────────
+def build_precaution_map(df_prec: pd.DataFrame) -> dict:
+    """
+    Build { disease_name: [precaution_1, precaution_2, ...] }
+    from the symptom_precaution.csv DataFrame.
+    """
+    if df_prec.empty:
+        return {}
+    prec_dis_col = _get_col(df_prec, 'disease')
+    if not prec_dis_col:
+        return {}
+    pcols  = [c for c in df_prec.columns if c != prec_dis_col]
+    result = {}
+    for _, row in df_prec.iterrows():
+        disease = str(row[prec_dis_col]).strip()
+        if not disease or disease == 'nan':
+            continue
+        precs = [
+            str(row.get(col, '')).strip()
+            for col in pcols
+            if str(row.get(col, '')).strip() not in ('', 'nan', 'None')
+        ]
+        if precs:
+            result[disease] = precs
+    print(f"✅ Precaution map built: {len(result)} diseases")
+    return result
+
+
 def build_knowledge_chunks(dfs: dict) -> list:
-    """Build RAG chunks from your 4 CSVs."""
     df_sym  = dfs.get("symptoms",    pd.DataFrame())
     df_desc = dfs.get("description", pd.DataFrame())
     df_prec = dfs.get("precaution",  pd.DataFrame())
     df_sev  = dfs.get("severity",    pd.DataFrame())
 
-    # Severity lookup
     sev_lookup = {}
     if not df_sev.empty:
         sym_col = _get_col(df_sev, 'symptom')
@@ -85,14 +102,12 @@ def build_knowledge_chunks(dfs: dict) -> list:
     sym_cols     = [c for c in df_sym.columns if c != sym_dis_col] \
                    if not df_sym.empty else []
 
-    # All unique diseases
     all_diseases = set()
     if not df_sym.empty  and sym_dis_col:
         all_diseases.update(df_sym[sym_dis_col].dropna().str.strip().unique())
     if not df_desc.empty and desc_dis_col:
         all_diseases.update(df_desc[desc_dis_col].dropna().str.strip().unique())
 
-    # Description lookup
     desc_lookup = {}
     if not df_desc.empty and desc_dis_col:
         dc = next((c for c in df_desc.columns
@@ -105,7 +120,6 @@ def build_knowledge_chunks(dfs: dict) -> list:
                 desc_lookup[str(row[desc_dis_col]).strip()] = \
                     str(row[dc]).strip()
 
-    # Precaution lookup
     prec_lookup = {}
     if not df_prec.empty and prec_dis_col:
         pcols = [c for c in df_prec.columns if c != prec_dis_col]
@@ -191,25 +205,6 @@ def get_symptom_severity_map(dfs: dict) -> dict:
     return result
 
 
-# ──────────────────────────────────────────────────────────────
-#  2. PARSE MedQuAD CSVs
-#  10 CSV files inside MedQuAD folder
-#  Columns expected: Question, Answer (may vary by file)
-# ──────────────────────────────────────────────────────────────
-MEDQUAD_FILES = [
-    "CancerQA.csv",
-    "Diabetes_and_Digestive_and_Kidney_Dise...csv",
-    "Disease_Control_and_PreventionQA.csv",
-    "Genetic_and_Rare_DiseasesQA.csv",
-    "growth_hormone_receptorQA.csv",
-    "Heart_Lung_and_BloodQA.csv",
-    "MedicalQuestionAnswering.csv",
-    "Neurological_Disorders_and_StrokeQA.csv",
-    "OtherQA.csv",
-    "SeniorHealthQA.csv",
-]
-
-# Category labels for each file
 MEDQUAD_CATEGORIES = {
     "CancerQA":                               "Oncology",
     "Diabetes_and_Digestive_and_Kidney":      "Endocrinology / Gastroenterology",
@@ -232,11 +227,6 @@ def _get_medquad_category(filename: str) -> str:
 
 
 def parse_medquad(data_dir: str = "data") -> list:
-    """
-    Parse all MedQuAD CSV files into RAG chunks.
-    Each Q&A pair becomes one chunk.
-    """
-    # Find the MedQuAD folder
     medquad_dir = None
     for item in os.listdir(data_dir):
         full = os.path.join(data_dir, item)
@@ -263,13 +253,11 @@ def parse_medquad(data_dir: str = "data") -> list:
             df = pd.read_csv(fpath, on_bad_lines='skip')
             df.columns = df.columns.str.strip()
 
-            # Find question and answer columns (flexible naming)
             q_col = next((c for c in df.columns
                           if 'question' in c.lower() or c.lower() == 'q'), None)
             a_col = next((c for c in df.columns
                           if 'answer' in c.lower() or c.lower() == 'a'), None)
 
-            # Fallback: use first two columns
             if not q_col and len(df.columns) >= 1:
                 q_col = df.columns[0]
             if not a_col and len(df.columns) >= 2:
@@ -287,7 +275,6 @@ def parse_medquad(data_dir: str = "data") -> list:
                 if not question or not answer or len(answer) < 20:
                     continue
 
-                # Build rich text: question repeated + answer
                 text = (
                     f"Question: {question} "
                     f"Answer: {answer} "
@@ -312,17 +299,7 @@ def parse_medquad(data_dir: str = "data") -> list:
     return chunks
 
 
-# ──────────────────────────────────────────────────────────────
-#  3. PARSE MedlinePlus XML
-#  File: mplus_topics_2026-02-26.xml
-#  Structure: <health-topics> → <health-topic> → <full-summary>
-# ──────────────────────────────────────────────────────────────
 def parse_medlineplus(data_dir: str = "data") -> list:
-    """
-    Parse MedlinePlus health topics XML into RAG chunks.
-    Each health topic becomes one chunk.
-    """
-    # Find the XML file
     xml_file = None
     for fname in os.listdir(data_dir):
         if fname.startswith('mplus') and fname.endswith('.xml'):
@@ -339,67 +316,42 @@ def parse_medlineplus(data_dir: str = "data") -> list:
     skipped = 0
 
     try:
-        tree = ET.parse(xml_file)
-        root = tree.getroot()
-
-        # Handle both <health-topics> and direct root
+        tree   = ET.parse(xml_file)
+        root   = tree.getroot()
         topics = root.findall('.//health-topic')
         if not topics:
             topics = root.findall('health-topic')
 
         for topic in topics:
-            title   = _clean(topic.get('title', ''))
-            url     = topic.get('url', '')
-
-            # Get full summary text
+            title      = _clean(topic.get('title', ''))
+            url        = topic.get('url', '')
             summary_el = topic.find('full-summary')
             summary    = ""
             if summary_el is not None and summary_el.text:
-                # Strip HTML tags from summary
                 summary = re.sub(r'<[^>]+>', ' ', summary_el.text)
                 summary = _clean(summary)
 
-            # Get also-called (alternate names)
-            also_called = []
-            for ac in topic.findall('also-called'):
-                if ac.text:
-                    also_called.append(_clean(ac.text))
-
-            # Get groups (body systems / categories)
-            groups = []
-            for g in topic.findall('group'):
-                if g.text:
-                    groups.append(_clean(g.text))
-
-            # Get related topics
-            related = []
-            for rt in topic.findall('related-topic'):
-                if rt.text:
-                    related.append(_clean(rt.text))
+            also_called = [_clean(ac.text) for ac in topic.findall('also-called') if ac.text]
+            groups      = [_clean(g.text)  for g  in topic.findall('group')       if g.text]
+            related     = [_clean(rt.text) for rt in topic.findall('related-topic') if rt.text]
 
             if not title or not summary:
                 skipped += 1
                 continue
 
-            # Build text
             text_parts = [f"Health Topic: {title}."]
             if also_called:
-                text_parts.append(
-                    f"{title} is also known as: {', '.join(also_called)}.")
+                text_parts.append(f"{title} is also known as: {', '.join(also_called)}.")
             if groups:
-                text_parts.append(
-                    f"Medical category: {', '.join(groups)}.")
-            text_parts.append(summary[:800])  # cap at 800 chars per chunk
+                text_parts.append(f"Medical category: {', '.join(groups)}.")
+            text_parts.append(summary[:800])
             if related:
-                text_parts.append(
-                    f"Related topics: {', '.join(related[:5])}.")
-
-            category = groups[0] if groups else "General Medicine"
+                text_parts.append(f"Related topics: {', '.join(related[:5])}.")
 
             chunks.append({
                 "id":       f"mplus_{len(chunks)}",
                 "title":    title,
-                "category": category,
+                "category": groups[0] if groups else "General Medicine",
                 "source":   "MedlinePlus (NIH)",
                 "url":      url,
                 "text":     " ".join(text_parts),
@@ -416,22 +368,7 @@ def parse_medlineplus(data_dir: str = "data") -> list:
     return chunks
 
 
-# ──────────────────────────────────────────────────────────────
-#  4. PARSE ICD-10 TXT
-#  File: icd10cm_order_2026.txt
-#  Fixed-width format:
-#  Col 0–5:   order number
-#  Col 6–13:  ICD code
-#  Col 14:    header flag (1=header, 0=valid code)
-#  Col 16–76: short description
-#  Col 77+:   long description
-# ──────────────────────────────────────────────────────────────
 def parse_icd10(data_dir: str = "data") -> list:
-    """
-    Parse ICD-10-CM order file into RAG chunks.
-    Only includes valid billable codes (header flag = 0).
-    Groups by code prefix for better retrieval.
-    """
     icd_file = os.path.join(data_dir, "icd10cm_order_2026.txt")
 
     if not os.path.exists(icd_file):
@@ -440,7 +377,6 @@ def parse_icd10(data_dir: str = "data") -> list:
 
     print(f"📄 Parsing ICD-10 file...")
 
-    # ICD-10 category prefixes → medical specialty
     ICD_CATEGORIES = {
         'A': 'Infectious Diseases', 'B': 'Infectious Diseases',
         'C': 'Oncology',            'D': 'Blood / Oncology',
@@ -455,11 +391,7 @@ def parse_icd10(data_dir: str = "data") -> list:
         'Z': 'Preventive / Wellness',
     }
 
-    chunks  = []
-    skipped = 0
-
-    # We'll batch codes with the same 3-character prefix into one chunk
-    # to keep chunk count manageable (77k → ~2k grouped chunks)
+    chunks        = []
     prefix_groups = {}
 
     try:
@@ -467,9 +399,7 @@ def parse_icd10(data_dir: str = "data") -> list:
             for line in f:
                 if len(line) < 77:
                     continue
-
-                header_flag = line[14:15].strip()
-                if header_flag == '1':   # skip section headers
+                if line[14:15].strip() == '1':
                     continue
 
                 code      = line[6:14].strip()
@@ -477,7 +407,6 @@ def parse_icd10(data_dir: str = "data") -> list:
                 long_desc  = _clean(line[77:]) if len(line) > 77 else short_desc
 
                 if not code or not long_desc:
-                    skipped += 1
                     continue
 
                 prefix   = code[:3]
@@ -495,38 +424,30 @@ def parse_icd10(data_dir: str = "data") -> list:
                     "long_desc":  long_desc,
                 })
 
-        # Convert prefix groups to chunks
         for prefix, group in prefix_groups.items():
             codes    = group["codes"]
             category = group["category"]
-
-            # Use first code's description as the group title
-            title = codes[0]["short_desc"] if codes else prefix
-
-            # Build text: all long descriptions joined
+            title    = codes[0]["short_desc"] if codes else prefix
             descriptions = [
                 f"{c['code']}: {c['long_desc']}"
-                for c in codes[:20]   # cap at 20 codes per chunk
+                for c in codes[:20]
             ]
-
             text = (
                 f"ICD-10 codes starting with {prefix}. "
                 f"Medical category: {category}. "
                 f"Conditions: {' | '.join(descriptions)}"
             )
-
             chunks.append({
-                "id":       f"icd10_{prefix}",
-                "prefix":   prefix,
-                "title":    title,
-                "category": category,
-                "source":   "ICD-10-CM 2026 (CMS)",
+                "id":         f"icd10_{prefix}",
+                "prefix":     prefix,
+                "title":      title,
+                "category":   category,
+                "source":     "ICD-10-CM 2026 (CMS)",
                 "code_count": len(codes),
-                "text":     text,
+                "text":       text,
             })
 
-        print(f"✅ ICD-10 parsed: {len(chunks)} prefix-grouped chunks "
-              f"({sum(len(g['codes']) for g in prefix_groups.values())} total codes)")
+        print(f"✅ ICD-10 parsed: {len(chunks)} prefix-grouped chunks")
 
     except Exception as e:
         print(f"❌ ICD-10 parse error: {e}")
@@ -534,15 +455,11 @@ def parse_icd10(data_dir: str = "data") -> list:
     return chunks
 
 
-# ──────────────────────────────────────────────────────────────
-#  5. UNIFIED LOADER — combines all sources
-# ──────────────────────────────────────────────────────────────
+# ── UNIFIED LOADER ────────────────────────────────────────────
 def build_all_chunks(data_dir: str = "data") -> tuple:
     """
-    Master function that loads and parses all data sources.
-    Returns (all_chunks, severity_map)
-
-    Call this from main.py instead of build_knowledge_chunks.
+    Returns (all_chunks, severity_map, precaution_map)
+    ✅ Now returns precaution_map as the third element.
     """
     print("\n" + "="*55)
     print("  📚 Loading All Knowledge Sources")
@@ -550,24 +467,21 @@ def build_all_chunks(data_dir: str = "data") -> tuple:
 
     all_chunks = []
 
-    # 1. Your 4 CSVs
     print("\n[1/4] Loading disease-symptom CSVs...")
     dfs        = load_datasets(data_dir)
     csv_chunks = build_knowledge_chunks(dfs)
     sev_map    = get_symptom_severity_map(dfs)
+    prec_map   = build_precaution_map(dfs.get("precaution", pd.DataFrame()))  # [NEW]
     all_chunks.extend(csv_chunks)
 
-    # 2. MedQuAD
     print("\n[2/4] Parsing MedQuAD Q&A files...")
     mq_chunks  = parse_medquad(data_dir)
     all_chunks.extend(mq_chunks)
 
-    # 3. MedlinePlus XML
     print("\n[3/4] Parsing MedlinePlus XML...")
     mp_chunks  = parse_medlineplus(data_dir)
     all_chunks.extend(mp_chunks)
 
-    # 4. ICD-10
     print("\n[4/4] Parsing ICD-10 codes...")
     icd_chunks = parse_icd10(data_dir)
     all_chunks.extend(icd_chunks)
@@ -579,6 +493,7 @@ def build_all_chunks(data_dir: str = "data") -> tuple:
     print(f"     • MedlinePlus Topics  : {len(mp_chunks)}")
     print(f"     • ICD-10 Groups       : {len(icd_chunks)}")
     print(f"     • Severity map        : {len(sev_map)} symptoms")
+    print(f"     • Precaution map      : {len(prec_map)} diseases")
     print("="*55 + "\n")
 
-    return all_chunks, sev_map
+    return all_chunks, sev_map, prec_map   # ← [NEW] third return value
