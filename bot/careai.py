@@ -10,11 +10,25 @@
 #  ✅ Streaming token-by-token output
 #  ✅ Conversational / August-AI-style tone
 #  ✅ Rolling context memory with auto-compression
-#  ✅ [NEW] Treatment guidance (home care, escalation, lifestyle)
-#  ✅ [NEW] Precautions from symptom_precaution.csv
-#  ✅ [NEW] Red flag symptom alerts
-#  ✅ [NEW] Symptom follow-up checker
-#  ✅ [NEW] Mental health check-in for severe/chronic conditions
+#  ✅ Treatment guidance (home care, escalation, lifestyle)
+#  ✅ Precautions from symptom_precaution.csv
+#  ✅ Red flag symptom alerts
+#  ✅ Symptom follow-up checker
+#  ✅ Mental health check-in for severe/chronic conditions
+#
+#  [Phase 1 + 2 Upgrades]
+#  ✅ [P1-A] Strict language enforcement across all prompts
+#  ✅ [P1-B] 120-word answer cap — _stream_answer() 250 tok / _stream_xai() 450 tok
+#  ✅ [P1-C] XAI rewritten: cause → reasoning → recommendation
+#  ✅ [P1-D] Differential cards include description + key_evidence
+#  ✅ [P2-A] Confidence-threshold follow-up (replaces fixed 3-cap)
+#  ✅ [P2-B] Symptom-relevance gate on SOCRATES questions
+#  ✅ [P2-C] Zero-information graceful handling
+#
+#  [Phase 3 — Hallucination Control]
+#  ✅ [P3-A] Claim-level fact-checking (per-sentence verification)
+#  ✅ [P3-B] Deterministic hallucination_risk from unsupported ratio
+#  ✅ [P3-C] Auto-corrected answer strips unsupported claims
 # ================================================================
 
 import json, re, sys
@@ -25,50 +39,16 @@ from core import (
     VectorStore, SymptomScorer,
     LANG_DETECT_PROMPT, FOLLOWUP_PROMPT, REASONING_PROMPT,
     ANSWER_PROMPT, FACTCHECK_PROMPT, XAI_EXPLAINER_PROMPT,
+    TREATMENT_PROMPT, REDFLAGS_PROMPT,
 )
-
-# ── [NEW] Import treatment + red flag prompts ─────────────────
-# Add these to your core/prompts.py (see prompts_additions.py output)
-try:
-    from core import TREATMENT_PROMPT, REDFLAGS_PROMPT
-except ImportError:
-    # Fallback inline if not yet added to core/__init__.py
-    TREATMENT_PROMPT = """
-You are a responsible medical guidance assistant. You do NOT prescribe drugs.
-Given the diagnosed condition and triage level, provide:
-1. HOME_CARE: Practical self-care steps (rest, hydration, hygiene, OTC general advice like saline rinse — never specific drug names)
-2. ESCALATION: Exactly when to seek more help — "if no improvement in X days" or "if Y symptom appears, go to ER"
-3. LIFESTYLE: Specific prevention tips and lifestyle adjustments for this condition
-4. PRECAUTIONS: What to avoid (triggers, foods, activities, environments)
-
-Return ONLY valid JSON:
-{
-  "home_care": ["step 1", "step 2", ...],
-  "escalation_timeline": "If no improvement in X days, see a doctor. If [specific symptom], go to ER immediately.",
-  "lifestyle_tips": ["tip 1", "tip 2", ...],
-  "what_to_avoid": ["avoid 1", "avoid 2", ...]
-}
-"""
-
-    REDFLAGS_PROMPT = """
-You are a medical safety monitor. Given the condition and symptoms described,
-list the specific RED FLAG symptoms the user must watch for that would indicate
-their condition is worsening and requires immediate emergency care.
-
-Return ONLY valid JSON:
-{
-  "red_flags": ["symptom 1", "symptom 2", ...],
-  "emergency_threshold": "Go to ER immediately if any of the above appear."
-}
-"""
 
 
 class ConvState(Enum):
-    GREETING   = "greeting"
-    GATHERING  = "gathering"
-    READY      = "ready"
-    ANSWERED   = "answered"
-    FOLLOWUP   = "followup_check"
+    GREETING  = "greeting"
+    GATHERING = "gathering"
+    READY     = "ready"
+    ANSWERED  = "answered"
+    FOLLOWUP  = "followup_check"
 
 
 TRIAGE_CONFIG = {
@@ -86,11 +66,19 @@ EMERGENCY_KEYWORDS = [
     "throat swelling", "anaphylaxis", "not breathing",
 ]
 
-# Conditions that warrant a mental health check-in
 MENTAL_HEALTH_CONDITIONS = {
     "depression", "anxiety", "stress", "panic", "ptsd", "bipolar",
     "schizophrenia", "ocd", "eating disorder", "insomnia", "chronic pain",
     "cancer", "diabetes", "heart disease", "chronic", "terminal",
+}
+
+# [P2-C] Words/phrases that signal user cannot provide more info
+VAGUE_RESPONSES = {
+    "i don't know", "idk", "not sure", "maybe", "i dont know",
+    "no idea", "don't know", "dunno", "nope", "nothing", "none",
+    "i am not sure", "not really", "can't say", "hard to say",
+    "telidu", "telidhu", "teliyadu", "pata nahi", "nahi pata",
+    "गुमान नहीं", "पता नहीं", "தெரியவில்லை",
 }
 
 CONVERSATIONAL_WRAPPER = """\
@@ -100,16 +88,21 @@ Your tone:
   • Calm and reassuring — never alarmist, never robotic
   • Conversational — speak like a caring doctor, not a textbook
   • Concise — one idea per sentence, short paragraphs
-  • Honest — always flag uncertainty using the hallucination risk indicator
+  • Honest — always flag uncertainty
+
+STRICT LANGUAGE RULE:
+  • Detect the user's language from the conversation.
+  • You MUST respond ENTIRELY in that language — every word.
+  • Never switch to English or any other language.
 
 When asking SOCRATES follow-up questions:
   • Ask ONE question at a time, naturally woven into your reply
-  • Example: "Got it — how long have you been feeling this way?"
   • Never list multiple questions at once
 
 When giving a clinical assessment:
   • Open with a brief reassuring or urgent line matching the triage level
-  • Then deliver the structured answer with inline citations [1][2][3]
+  • Keep the main answer to 80-120 words maximum
+  • Use inline citations [1][2][3] after every factual claim
 
 {base_prompt}
 """
@@ -118,32 +111,36 @@ When giving a clinical assessment:
 class CareAI:
     def __init__(self, knowledge_chunks: list, severity_map: dict,
                  api_key: str, precaution_map: dict = None):
-        self.client        = Groq(api_key=api_key)
-        self.model         = "llama-3.3-70b-versatile"
-        self.vs            = VectorStore(knowledge_chunks)
-        self.scorer        = SymptomScorer(severity_map)
-        self.precaution_map = precaution_map or {}   # [NEW] disease → [precautions]
+        self.client         = Groq(api_key=api_key)
+        self.model          = "llama-3.3-70b-versatile"
+        self.vs             = VectorStore(knowledge_chunks)
+        self.scorer         = SymptomScorer(severity_map)
+        self.precaution_map = precaution_map or {}
         self._reset_state()
         print("✅ Care-AI ready!\n")
 
-    def _reset_state(self):
-        self.history           = []
-        self.state             = ConvState.GREETING
-        self.collected_info    = {}
-        self.followup_count    = 0
-        self.max_followups     = 3
-        self.user_language     = {"language": "English", "code": "en"}
-        self.xai_logs          = []
-        self.severity_result   = {}
-        self.last_triage       = None
-        self.last_specialist   = None
-        self.last_differential = []
-        self.last_top_condition = ""
-        self.followup_asked    = False   # [NEW] track if follow-up check was sent
-        self.memory_window     = 6
-        self.session_summary   = ""
+    # ── STATE ──────────────────────────────────────────────────
 
-    # ── MEMORY HELPERS ────────────────────────────────────────
+    def _reset_state(self):
+        self.history            = []
+        self.state              = ConvState.GREETING
+        self.collected_info     = {}
+        self.followup_count     = 0
+        # [P2-A] No hard cap — confidence threshold drives stopping
+        self.user_language      = {"language": "English", "code": "en"}
+        self.xai_logs           = []
+        self.severity_result    = {}
+        self.last_triage        = None
+        self.last_specialist    = None
+        self.last_differential  = []
+        self.last_top_condition = ""
+        self.followup_asked     = False
+        self.memory_window      = 6
+        self.session_summary    = ""
+        # [P2-C] Track consecutive zero-info responses
+        self.no_new_info_count  = 0
+
+    # ── MEMORY ────────────────────────────────────────────────
 
     def _add_turn(self, role: str, content: str):
         self.history.append({"role": role, "content": content})
@@ -195,9 +192,12 @@ class CareAI:
         messages.extend(self.history)
         return messages
 
-    # ── STREAMING OUTPUT ──────────────────────────────────────
+    # ── STREAMING ─────────────────────────────────────────────
 
-    def _stream(self, messages: list, label: str = "") -> str:
+    def _stream(self, messages: list, label: str = "",
+                max_tokens: int = 600, temperature: float = 0.3) -> str:
+        """Generic streaming helper — use _stream_answer() or _stream_xai() for
+        the two main pipeline passes; this stays as a fallback for anything else."""
         if label:
             print(f"\n  {label}", flush=True)
         full_text = []
@@ -205,8 +205,8 @@ class CareAI:
             stream = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                max_tokens=1500,
-                temperature=0.3,
+                max_tokens=max_tokens,
+                temperature=temperature,
                 stream=True,
             )
             for chunk in stream:
@@ -223,6 +223,22 @@ class CareAI:
             print(f"\n  ⚠️  Stream error: {e}")
         print()
         return "".join(full_text)
+
+    def _stream_answer(self, messages: list) -> str:
+        """
+        [P1-B] Pass 6 — Answer generation stream.
+        250 tokens ≈ 120 words hard ceiling.
+        Enforces the 80-120 word plain-language answer cap.
+        """
+        return self._stream(messages, label="", max_tokens=250, temperature=0.3)
+
+    def _stream_xai(self, messages: list, label: str = "") -> str:
+        """
+        [P1-C] Pass 8 — XAI explanation stream.
+        450 tokens — enough for 3 'Because X → Y' bullets + closing sentence
+        without bleeding into the answer budget.
+        """
+        return self._stream(messages, label=label, max_tokens=450, temperature=0.3)
 
     def _wrap_prompt(self, base_prompt: str) -> str:
         return CONVERSATIONAL_WRAPPER.format(base_prompt=base_prompt)
@@ -275,39 +291,230 @@ class CareAI:
         return self._parse_json(raw, {"language": "English", "code": "en"})
 
     # ── PASS 2: SOCRATES FOLLOW-UP ENGINE ─────────────────────
+    # [P2-A] Confidence-threshold based stopping
+    # [P2-B] Relevance gate — only asks relevant SOCRATES dims
+    # [P2-C] Zero-info detection — stops after 2 vague responses
+
+    def _is_vague_response(self, msg: str) -> bool:
+        """Return True if the user's message provides no new clinical info."""
+        msg_lower = msg.lower().strip()
+        # Check against known vague phrases
+        if any(v in msg_lower for v in VAGUE_RESPONSES):
+            return True
+        # Also flag very short responses with no medical content
+        words = msg_lower.split()
+        if len(words) <= 2 and not any(
+            c.isdigit() for c in msg_lower
+        ):
+            return True
+        return False
+
+    # ── PATTERN DETECTOR — runs before LLM follow-up call ────
+    # Detects symptom patterns from collected info + history
+    # and injects reasoning hints into the follow-up prompt.
+    # This is how Care-AI "connects the dots" like August AI does.
+
+    def _detect_symptom_patterns(self) -> dict:
+        """
+        Analyze collected SOCRATES data + history for clinical patterns.
+        Returns a dict of detected patterns and the next suggested dimension.
+        """
+        all_user_text = " ".join(
+            m['content'].lower() for m in self.history if m['role'] == 'user'
+        )
+        info = self.collected_info
+
+        patterns = []
+        priority_question = None
+
+        # ── Pattern 1: Positional / movement-triggered pain ───
+        POSITIONAL_SIGNALS = [
+            "bend", "bending", "lifting", "lift", "move", "moving",
+            "position", "sit", "sitting", "stand", "stretch", "twist",
+            "walk", "walking", "exercise", "pressure", "touch", "press",
+            "worse when", "better when", "only when",
+        ]
+        is_positional = any(s in all_user_text for s in POSITIONAL_SIGNALS)
+
+        # ── Pattern 2: Musculoskeletal character ──────────────
+        MUSCLE_SIGNALS = [
+            "cramp", "cramping", "sharp", "pull", "strain", "tight",
+            "sore", "ache", "stiff", "muscle", "spasm",
+        ]
+        is_muscular = any(s in all_user_text for s in MUSCLE_SIGNALS)
+
+        # ── Pattern 3: Trigger/activity not yet collected ─────
+        trigger = info.get("trigger_activity")
+        trigger_collected = (
+            trigger and
+            str(trigger).strip().lower() not in ("null", "none", "", "...")
+        )
+
+        # ── Pattern 4: Already asked about activity ───────────
+        ACTIVITY_ASKED_SIGNALS = [
+            "exercise", "workout", "physical activity", "gym",
+            "lifting", "sport", "exertion", "activity before",
+        ]
+        activity_already_asked = any(
+            s in m['content'].lower()
+            for m in self.history if m['role'] == 'assistant'
+            for s in ACTIVITY_ASKED_SIGNALS
+        )
+
+        # ── Connect the dots ──────────────────────────────────
+        if is_positional and is_muscular and not trigger_collected and not activity_already_asked:
+            patterns.append("POSITIONAL_MUSCULAR_PAIN")
+            priority_question = (
+                f"The pain is positional and muscular in character. "
+                f"The most diagnostically important next question is: "
+                f"did the user do any exercise, workout, heavy lifting, "
+                f"or physical activity before this pain started? "
+                f"Ask this question next — it may reveal the root cause immediately."
+            )
+
+        elif is_positional and not trigger_collected and not activity_already_asked:
+            patterns.append("POSITIONAL_PAIN")
+            priority_question = (
+                f"The pain is triggered by movement or position. "
+                f"Ask about recent physical activity or trigger event next."
+            )
+
+        return {
+            "patterns":         patterns,
+            "priority_hint":    priority_question,
+            "is_positional":    is_positional,
+            "is_muscular":      is_muscular,
+            "trigger_missing":  not trigger_collected,
+        }
 
     def _check_followup(self):
         history_str = "\n".join(
-            f"{'User' if m['role']=='user' else 'Assistant'}: {m['content']}"
+            f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
             for m in self.history
         )
+
+        # [P2-C] Detect zero-information responses
+        last_user_msg = next(
+            (m['content'] for m in reversed(self.history) if m['role'] == 'user'), ""
+        )
+        if self._is_vague_response(last_user_msg):
+            self.no_new_info_count += 1
+        else:
+            self.no_new_info_count = 0
+
+        # [P2-C] Force stop after 2 consecutive vague responses
+        if self.no_new_info_count >= 2:
+            print("⏭️  User gave no new info — skipping further follow-up.")
+            return {
+                "has_enough_info":       True,
+                "diagnostic_confidence": 50,
+                "collected_info":        {},
+                "followup_question":     None,
+                "followup_reason":       "User unable to provide more information",
+                "no_new_info_count":     self.no_new_info_count,
+            }
+
+        # Hard backstop: never exceed 5 follow-up questions
+        if self.followup_count >= 5:
+            print("⏭️  Max follow-ups reached — proceeding to answer.")
+            return {
+                "has_enough_info":       True,
+                "diagnostic_confidence": 60,
+                "collected_info":        {},
+                "followup_question":     None,
+                "followup_reason":       "Maximum follow-ups reached",
+                "no_new_info_count":     self.no_new_info_count,
+            }
+
+        # ── Pattern detection — connect the dots before LLM ───
+        patterns = self._detect_symptom_patterns()
+        priority_hint = patterns.get("priority_hint", "")
+
+        if priority_hint:
+            print(f"🔍 Pattern detected: {patterns['patterns']}")
+
         prompt = (
             f"Conversation:\n{history_str}\n\n"
-            f"SOCRATES info collected: {json.dumps(self.collected_info)}\n"
-            f"Follow-ups asked: {self.followup_count}/{self.max_followups}\n"
-            f"User language: {self.user_language['language']}"
+            f"SOCRATES info collected so far: {json.dumps(self.collected_info)}\n"
+            f"Follow-ups asked so far: {self.followup_count}/5 (hard max)\n"
+            f"User language: {self.user_language['language']}\n"
+            f"Consecutive no-new-info responses: {self.no_new_info_count}\n"
+            + (f"\nCLINICAL PATTERN DETECTED — PRIORITY INSTRUCTION:\n{priority_hint}\n"
+               if priority_hint else "")
         )
+
         raw = self._llm(FOLLOWUP_PROMPT, prompt, temp=0.1)
-        return self._parse_json(raw, {
-            "has_enough_info":   True,
-            "collected_info":    {},
-            "followup_question": None,
-            "followup_reason":   "",
+        result = self._parse_json(raw, {
+            "has_enough_info":       True,
+            "diagnostic_confidence": 50,
+            "collected_info":        {},
+            "followup_question":     None,
+            "followup_reason":       "",
+            "no_new_info_count":     0,
         })
+
+        # [P2-A] Override has_enough_info if confidence threshold met
+        confidence = result.get("diagnostic_confidence", 50)
+        if confidence >= 65:
+            result["has_enough_info"] = True
+
+        # Hard backstop (double-check after LLM response)
+        if self.followup_count >= 5:
+            result["has_enough_info"] = True
+            result["followup_question"] = None
+
+        return result
+
+    # ── PASS 2.5: QUERY PRE-CLASSIFICATION ───────────────────
+    # [P3-ROUTING] Fast single-call classifier — runs before RAG retrieval
+    # so vector_store.search() receives the correct query_category for
+    # source routing.  Avoids restructuring the pipeline.
+
+    _CLASSIFY_PROMPT = (
+        "Classify this medical query into ONE of these categories:\n"
+        "SYMPTOM, MEDICATION, CONDITION, WELLNESS, MENTAL_HEALTH, EMERGENCY, UNKNOWN\n\n"
+        "Rules:\n"
+        "- SYMPTOM: user describes a physical symptom or complaint\n"
+        "- MEDICATION: asks about a drug, dose, or side effect\n"
+        "- CONDITION: asks what a named condition is\n"
+        "- WELLNESS: general health/lifestyle question\n"
+        "- MENTAL_HEALTH: emotional or psychological concern\n"
+        "- EMERGENCY: life-threatening symptoms\n"
+        "- UNKNOWN: anything else\n\n"
+        "Return ONLY the single category word. No explanation."
+    )
+
+    def _classify_query(self) -> str:
+        """Return query_category string for routing RAG retrieval."""
+        last_msgs = " ".join(
+            m['content'] for m in self.history[-4:] if m['role'] == 'user'
+        )
+        try:
+            raw = self._llm(
+                self._CLASSIFY_PROMPT, last_msgs,
+                temp=0.0, max_tok=10,
+            ).strip().upper()
+            valid = {"SYMPTOM","MEDICATION","CONDITION","WELLNESS",
+                     "MENTAL_HEALTH","EMERGENCY","UNKNOWN"}
+            return raw if raw in valid else "SYMPTOM"
+        except Exception:
+            return "SYMPTOM"
 
     # ── PASS 3: RAG RETRIEVAL ─────────────────────────────────
 
-    def _retrieve(self, k=6):
+    def _retrieve(self, k=6, query_category: str = "SYMPTOM"):
         parts = [m['content'] for m in self.history[-4:] if m['role'] == 'user']
-        for field in ['symptom_or_topic', 'site', 'character', 'associations', 'other_details']:
+        for field in ['symptom_or_topic', 'site', 'character', 'associations', 'trigger_activity', 'other_details']:
             val = self.collected_info.get(field)
             if val and str(val).strip() not in ('', '...', 'null', 'None'):
                 parts.append(str(val))
         query     = " ".join(parts)
         extracted = self.scorer.extract_symptoms_from_text(query)
         if extracted:
-            return self.vs.search_by_symptoms(extracted, k=k)
-        return self.vs.search(query, k=k)
+            return self.vs.search_by_symptoms(
+                extracted, k=k, query_category=query_category
+            )
+        return self.vs.search(query, k=k, query_category=query_category)
 
     def _fmt_context(self, chunks):
         if not chunks:
@@ -353,7 +560,7 @@ class CareAI:
     def _reason(self, context_str):
         recent   = self.history[-8:]
         conv_str = "\n".join(
-            f"{'User' if m['role']=='user' else 'Bot'}: {m['content']}"
+            f"{'User' if m['role'] == 'user' else 'Bot'}: {m['content']}"
             for m in recent
         )
         socrates_str = json.dumps(self.collected_info, indent=2)
@@ -362,7 +569,7 @@ class CareAI:
             f"Conversation:\n{conv_str}\n\n"
             f"SOCRATES clinical data:\n{socrates_str}\n\n"
             f"{context_str}",
-            temp=0.1, max_tok=1000,
+            temp=0.1, max_tok=1200,
         )
         return self._parse_json(raw, {
             "query_category":         "UNKNOWN",
@@ -389,9 +596,9 @@ class CareAI:
         if severity_result:
             sev_note = (
                 f"\n\n## SYMPTOM SEVERITY (from dataset):\n"
-                f"Level: {severity_result.get('severity_level','N/A')}\n"
+                f"Level: {severity_result.get('severity_level', 'N/A')}\n"
                 f"High-risk symptoms: {severity_result.get('high_risk_symptoms', [])}\n"
-                f"Recommendation: {severity_result.get('recommendation','')}"
+                f"Recommendation: {severity_result.get('recommendation', '')}"
             )
         triage = reasoning.get('triage_level', 'SEE_DOCTOR')
         spec   = reasoning.get('specialist', 'General Practitioner')
@@ -400,36 +607,136 @@ class CareAI:
         base_system = (
             f"{ANSWER_PROMPT}\n\n"
             f"User's language: {self.user_language['language']} "
-            f"— respond ONLY in this language.\n\n"
+            f"— YOU MUST respond ONLY in this language. Never switch languages.\n\n"
             f"{context_str}"
             f"{sev_note}\n\n"
             f"## CLINICAL REASONING:\n{json.dumps(reasoning, indent=2)}\n\n"
             f"TRIAGE LEVEL: {triage}\n"
             f"RECOMMENDED SPECIALIST: {spec}\n"
             f"TOP DIFFERENTIAL: {diff[0]['condition'] if diff else 'Unknown'}\n\n"
+            f"WORD LIMIT: Your response must be 80-120 words maximum.\n"
             f"Use [1],[2],[3] citations after every factual claim."
         )
         messages = self._build_messages(self._wrap_prompt(base_system))
-        return self._stream(messages, label="")
+        return self._stream_answer(messages)
 
-    # ── PASS 7: FACT-CHECK (internal, non-streamed) ───────────
+    # ── PASS 7: CLAIM-LEVEL FACT-CHECK ────────────────────────
+    # [P3] Each sentence in the answer is checked individually
+    # against a specific numbered context chunk.
+    # Unsupported claims are stripped before showing to user.
 
-    def _factcheck(self, answer, context_str):
+    def _extract_claims(self, answer: str) -> list[str]:
+        """Split answer into individual checkable claims (sentences)."""
+        # Split on sentence boundaries, filter out very short fragments
+        sentences = re.split(r'(?<=[.!?])\s+', answer.strip())
+        claims = []
+        for s in sentences:
+            s = s.strip()
+            # Skip citation markers, disclaimers, single words
+            if len(s.split()) < 4:
+                continue
+            # Skip pure disclaimer lines
+            if any(skip in s.lower() for skip in [
+                "ai information only", "not a diagnosis",
+                "consult a", "please note", "disclaimer"
+            ]):
+                continue
+            claims.append(s)
+        return claims
+
+    def _factcheck(self, answer: str, context_str: str) -> dict:
+        """
+        Claim-level fact-checking:
+        1. Extract individual claims from the answer
+        2. Send all claims + context to FACTCHECK_PROMPT for per-claim verification
+        3. Compute hallucination_risk from ratio of unsupported claims
+        4. If risk is MEDIUM/HIGH, build corrected_answer from verified claims only
+        """
+        claims = self._extract_claims(answer)
+
+        if not claims:
+            return {
+                "verdict":            "UNVERIFIED",
+                "claim_checks":       [],
+                "verified_claims":    [],
+                "unsupported_claims": ["No checkable claims found"],
+                "hallucination_risk": "MEDIUM",
+                "corrected_answer":   None,
+                "summary":            "Answer was too short to fact-check.",
+            }
+
+        # Build a numbered claim list for the prompt
+        claims_str = "\n".join(f"Claim {i+1}: {c}" for i, c in enumerate(claims))
+
         raw = self._llm(
             FACTCHECK_PROMPT,
-            f"{context_str}\n\n## ANSWER TO VERIFY:\n{answer}",
+            f"{context_str}\n\n"
+            f"## CLAIMS TO VERIFY (check each one individually):\n{claims_str}\n\n"
+            f"## FULL ANSWER FOR CONTEXT:\n{answer}",
             temp=0.1,
+            max_tok=1200,
         )
-        return self._parse_json(raw, {
+
+        fc = self._parse_json(raw, {
             "verdict":            "UNVERIFIED",
+            "claim_checks":       [],
             "verified_claims":    [],
-            "unsupported_claims": ["Fact-check failed"],
+            "unsupported_claims": ["Fact-check parse failed"],
             "hallucination_risk": "HIGH",
             "corrected_answer":   None,
             "summary":            "Fact-check failed. Treat with caution.",
         })
 
+        # ── Compute hallucination_risk from claim ratio ────────
+        # Override whatever the LLM said with a deterministic calculation
+        claim_checks  = fc.get("claim_checks", [])
+        if claim_checks:
+            total      = len(claim_checks)
+            unsupported = sum(1 for c in claim_checks if not c.get("supported", True))
+            ratio       = unsupported / total
+
+            if ratio == 0:
+                computed_risk = "LOW"
+                computed_verdict = "VERIFIED"
+            elif ratio <= 0.35:
+                computed_risk = "MEDIUM"
+                computed_verdict = "PARTIALLY_VERIFIED"
+            else:
+                computed_risk = "HIGH"
+                computed_verdict = "UNVERIFIED"
+
+            fc["hallucination_risk"] = computed_risk
+            fc["verdict"]            = computed_verdict
+
+            # ── Build corrected answer from verified claims only ──
+            if computed_risk in ("MEDIUM", "HIGH") and not fc.get("corrected_answer"):
+                verified_sentences = [
+                    c["claim"] for c in claim_checks if c.get("supported", False)
+                ]
+                if verified_sentences:
+                    fc["corrected_answer"] = " ".join(verified_sentences)
+                else:
+                    # Nothing verified — fall back to safe generic
+                    fc["corrected_answer"] = (
+                        "Based on your symptoms, I recommend seeing a doctor "
+                        "for a proper assessment. I was unable to verify specific "
+                        "claims against my medical knowledge base with enough confidence."
+                    )
+
+            # ── Populate verified/unsupported lists if empty ──────
+            if not fc.get("verified_claims"):
+                fc["verified_claims"] = [
+                    c["claim"] for c in claim_checks if c.get("supported", False)
+                ]
+            if not fc.get("unsupported_claims"):
+                fc["unsupported_claims"] = [
+                    c["claim"] for c in claim_checks if not c.get("supported", True)
+                ]
+
+        return fc
+
     # ── PASS 8: XAI EXPLANATION (streamed) ────────────────────
+    # [P1-C] Rewritten: cause → reasoning → recommendation format
 
     def _xai_explain_streamed(self, reasoning, factcheck):
         last_user = next(
@@ -437,29 +744,39 @@ class CareAI:
         )
         diff = reasoning.get('differential_diagnosis', [])
         top  = diff[0]['condition'] if diff else 'unknown'
+
+        # [P1-C] Feed the chain-of-reasoning format inputs
+        supporting = diff[0].get('supporting_symptoms', []) if diff else []
+        key_evidence = diff[0].get('key_evidence', '') if diff else ''
+        uncertainty = reasoning.get('uncertainty_zones', ['nothing specific'])
+        triage = reasoning.get('triage_level', 'SEE_DOCTOR')
+        triage_reason = reasoning.get('triage_reason', '')
+        sources = reasoning.get('knowledge_sources', [])
+
         prompt = (
-            f"User's question: {last_user}\n"
+            f"User's message: {last_user}\n"
             f"User's language: {self.user_language['language']}\n\n"
-            f"Top likely condition: {top}\n"
-            f"Confidence: {reasoning.get('confidence_score')}%\n"
-            f"Why confident: {reasoning.get('confidence_explanation')}\n"
-            f"Sources: {', '.join(reasoning.get('knowledge_sources', []))}\n"
-            f"Uncertain about: {', '.join(reasoning.get('uncertainty_zones', ['nothing']))}\n"
-            f"Triage: {reasoning.get('triage_level')}\n"
-            f"Fact-check: {factcheck.get('verdict')} | "
-            f"Risk: {factcheck.get('hallucination_risk')}"
+            f"Top condition identified: {top}\n"
+            f"Key symptom pointing to this: {key_evidence}\n"
+            f"Supporting symptoms: {', '.join(supporting)}\n"
+            f"What sources were used: {', '.join(sources)}\n"
+            f"What the AI is uncertain about: {', '.join(uncertainty)}\n"
+            f"Triage decision: {triage}\n"
+            f"Reason for triage: {triage_reason}\n"
+            f"Fact-check result: {factcheck.get('verdict', 'N/A')}\n\n"
+            f"Write 3 bullets in 'Because X → Y' format, then one warm closing sentence.\n"
+            f"Respond entirely in: {self.user_language['language']}"
         )
         messages = [
             {"role": "system", "content": self._wrap_prompt(XAI_EXPLAINER_PROMPT)},
             {"role": "user",   "content": prompt},
         ]
-        return self._stream(messages, label="💡 Why did I give this answer?")
+        return self._stream_xai(messages, label="💡 Why did I give this answer?")
 
-    # ── [NEW] PASS 9: TREATMENT GUIDANCE ──────────────────────
+    # ── PASS 9: TREATMENT GUIDANCE ────────────────────────────
 
     def _get_treatment_guidance(self, top_condition: str, triage: str) -> dict:
         """Generate ethical treatment guidance — no drug names, just care steps."""
-        # Pull precautions from dataset if available
         dataset_precautions = []
         condition_lower = top_condition.lower()
         for disease, precautions in self.precaution_map.items():
@@ -479,8 +796,7 @@ class CareAI:
             f"Triage level: {triage}\n"
             f"User language: {self.user_language['language']}"
             f"{precaution_note}\n\n"
-            f"IMPORTANT: Do NOT mention any specific drug or medication names. "
-            f"Only general self-care, lifestyle, and escalation guidance."
+            f"IMPORTANT: Do NOT mention any specific drug or medication names."
         )
         raw = self._llm(TREATMENT_PROMPT, prompt, temp=0.2, max_tok=600)
         return self._parse_json(raw, {
@@ -490,7 +806,7 @@ class CareAI:
             "what_to_avoid":       ["Avoid strenuous activity until symptoms improve."],
         })
 
-    # ── [NEW] RED FLAG ALERTS ─────────────────────────────────
+    # ── RED FLAG ALERTS ───────────────────────────────────────
 
     def _get_red_flags(self, top_condition: str) -> dict:
         """Get condition-specific red flag symptoms to watch for."""
@@ -508,17 +824,15 @@ class CareAI:
             "emergency_threshold": "Go to ER immediately if any of the above appear.",
         })
 
-    # ── [NEW] MENTAL HEALTH CHECK-IN ──────────────────────────
+    # ── MENTAL HEALTH CHECK-IN ────────────────────────────────
 
     def _needs_mental_health_checkin(self, condition: str, triage: str) -> bool:
-        """Return True if condition warrants a mental health check-in."""
         if triage in ("URGENT_CARE", "EMERGENCY"):
             return True
         cond_lower = condition.lower()
         return any(kw in cond_lower for kw in MENTAL_HEALTH_CONDITIONS)
 
     def _mental_health_checkin(self, condition: str) -> str:
-        """Generate a brief, warm mental health check-in message."""
         prompt = (
             f"The user may have {condition}. "
             f"Write a warm, 2-sentence mental health check-in. "
@@ -531,13 +845,9 @@ class CareAI:
             prompt, temp=0.4, max_tok=120,
         )
 
-    # ── [NEW] SYMPTOM FOLLOW-UP CHECKER ───────────────────────
+    # ── SYMPTOM FOLLOW-UP CHECKER ─────────────────────────────
 
     def _symptom_followup_prompt(self, condition: str) -> str:
-        """
-        Returns a follow-up check-in message to ask after the user's
-        next message post-diagnosis. Shown once per session.
-        """
         prompt = (
             f"The user was assessed for {condition}. "
             f"Write ONE warm, natural sentence asking if they are feeling better "
@@ -553,14 +863,14 @@ class CareAI:
 
     def chat(self, user_message: str) -> dict:
 
-        # Emergency check (local — instant, no API)
+        # ── Emergency check (local, instant — no API call) ────
         if self._is_emergency(user_message):
             msg = self._emergency_msg()
             self._add_turn("user",      user_message)
             self._add_turn("assistant", msg)
             return {"type": "emergency", "message": msg}
 
-        # [NEW] Symptom follow-up check-in (once, after first answer)
+        # ── Symptom follow-up check-in (once, after first answer)
         if (
             self.state == ConvState.ANSWERED
             and not self.followup_asked
@@ -573,14 +883,19 @@ class CareAI:
             print(f"\n🔁 Care-AI (Follow-up): {followup_msg}\n")
             return {"type": "followup_check", "message": followup_msg}
 
-        # Language detect
+        # ── Language detection ────────────────────────────────
         if len(self.history) == 0 or len(self.history) % 6 == 0:
             self.user_language = self._detect_language(user_message)
 
         self._add_turn("user", user_message)
 
-        # SOCRATES follow-up engine
-        if self.followup_count < self.max_followups:
+        # ── SOCRATES follow-up engine ─────────────────────────
+        # [P2-A] No hard cap — stops when confidence >= 65%
+        # [P2-B] Relevance gate inside FOLLOWUP_PROMPT
+        # [P2-C] Stops after 2 consecutive zero-info responses
+
+        # Skip follow-up entirely if user already gave no info twice
+        if self.no_new_info_count < 2:
             print("🤔 Checking if more info needed...", end=" ", flush=True)
             fu = self._check_followup()
             print("✅")
@@ -589,23 +904,33 @@ class CareAI:
                 if v and str(v).strip() not in ('', '...', 'null', 'None'):
                     self.collected_info[k] = v
 
-            if not fu.get('has_enough_info') and fu.get('followup_question'):
+            confidence = fu.get('diagnostic_confidence', 50)
+            has_enough = fu.get('has_enough_info', True)
+
+            if not has_enough and fu.get('followup_question'):
                 self.followup_count += 1
                 q = fu['followup_question']
                 self._add_turn("assistant", q)
                 self.state = ConvState.GATHERING
                 return {
-                    "type":             "followup",
-                    "message":          q,
-                    "collected_so_far": self.collected_info,
-                    "followup_count":   self.followup_count,
-                    "socrates_dim":     fu.get('followup_reason', ''),
+                    "type":                  "followup",
+                    "message":               q,
+                    "collected_so_far":      self.collected_info,
+                    "followup_count":        self.followup_count,
+                    "diagnostic_confidence": confidence,
+                    "socrates_dim":          fu.get('followup_reason', ''),
                 }
+        else:
+            print("⏭️  Proceeding to answer — user gave no new info twice.")
 
         self.state = ConvState.READY
 
+        print("🔍 Classifying query...",       end=" ", flush=True)
+        query_category = self._classify_query()
+        print(f"✅ ({query_category})")
+
         print("📖 Retrieving context...",     end=" ", flush=True)
-        chunks      = self._retrieve(k=6)
+        chunks      = self._retrieve(k=6, query_category=query_category)
         context_str = self._fmt_context(chunks)
         sources     = self._fmt_sources(chunks)
         print(f"✅ ({len(chunks)} docs)")
@@ -616,21 +941,20 @@ class CareAI:
         print("✅")
 
         print("🧠 Differential diagnosis...", end=" ", flush=True)
-        reasoning  = self._reason(context_str)
-        self.last_triage       = reasoning.get('triage_level', 'SEE_DOCTOR')
-        self.last_specialist   = reasoning.get('specialist', 'General Practitioner')
-        self.last_differential = reasoning.get('differential_diagnosis', [])
+        reasoning = self._reason(context_str)
+        self.last_triage        = reasoning.get('triage_level', 'SEE_DOCTOR')
+        self.last_specialist    = reasoning.get('specialist', 'General Practitioner')
+        self.last_differential  = reasoning.get('differential_diagnosis', [])
         diff = self.last_differential
         self.last_top_condition = diff[0]['condition'] if diff else ""
         print("✅")
 
-        # [NEW] Treatment guidance + red flags (parallel internal calls)
         print("💊 Generating treatment guidance...", end=" ", flush=True)
-        treatment  = self._get_treatment_guidance(self.last_top_condition, self.last_triage)
-        red_flags  = self._get_red_flags(self.last_top_condition)
+        treatment = self._get_treatment_guidance(self.last_top_condition, self.last_triage)
+        red_flags = self._get_red_flags(self.last_top_condition)
         print("✅")
 
-        # Print header before streaming
+        # Print triage header before streaming
         from utils.display import print_triage_header
         print_triage_header(
             self.last_triage,
@@ -641,9 +965,13 @@ class CareAI:
         # Stream main answer
         answer = self._answer_streamed(context_str, reasoning, sev_result)
 
-        print("🔎 Fact-checking...", end=" ", flush=True)
+        print("🔎 Claim-level fact-checking...", end=" ", flush=True)
         fc = self._factcheck(answer, context_str)
-        print("✅")
+        checks     = fc.get("claim_checks", [])
+        n_verified = sum(1 for c in checks if c.get("supported", False))
+        n_total    = len(checks)
+        risk       = fc.get("hallucination_risk", "N/A")
+        print(f"✅ ({n_verified}/{n_total} claims verified | Risk: {risk})")
 
         final = (
             fc['corrected_answer']
@@ -657,7 +985,7 @@ class CareAI:
         # Stream XAI explanation
         xai = self._xai_explain_streamed(reasoning, fc)
 
-        # [NEW] Mental health check-in (if warranted)
+        # Mental health check-in if warranted
         mental_health_msg = ""
         if self._needs_mental_health_checkin(self.last_top_condition, self.last_triage):
             mental_health_msg = self._mental_health_checkin(self.last_top_condition)
@@ -665,11 +993,14 @@ class CareAI:
         self._add_turn("assistant", final)
         self.state = ConvState.ANSWERED
 
+        # [P1-D] Include description + key_evidence in diff display
         diff_display = [
             {
-                "rank":        d.get('rank'),
-                "condition":   d.get('condition'),
-                "probability": d.get('probability'),
+                "rank":         d.get('rank'),
+                "condition":    d.get('condition'),
+                "probability":  d.get('probability'),
+                "description":  d.get('description', ''),
+                "key_evidence": d.get('key_evidence', ''),
             }
             for d in self.last_differential
         ]
@@ -705,7 +1036,6 @@ class CareAI:
             "triage":             self.last_triage,
             "specialist":         self.last_specialist,
             "differential":       diff_display,
-            # [NEW]
             "treatment":          treatment,
             "red_flags":          red_flags,
             "mental_health_msg":  mental_health_msg,
