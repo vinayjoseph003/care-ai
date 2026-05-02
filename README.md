@@ -1,4 +1,3 @@
-<img width="1536" height="1024" alt="architecture" src="https://github.com/user-attachments/assets/a16c6199-558a-40ed-b245-40aa383869a7" />
 <div align="center">
 
 <h1>🏥 Care-AI</h1>
