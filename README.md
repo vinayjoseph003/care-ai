@@ -295,12 +295,8 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 
 ## 👤 Authors
 
-**Vinay Joseph**
-- GitHub: [@vinayjoseph003](https://github.com/vinayjoseph003)
-**Rohith**
-- GitHub: [@rohithbojja07](https://github.com/rohithbojja07)
----
-
+- **Vinay Joseph** – [@vinayjoseph003](https://github.com/vinayjoseph003)  
+- **Rohith** – [@rohithbojja07](https://github.com/rohithbojja07)
 <div align="center">
   <sub>Built as a Final Year Engineering Project | Academic Research Prototype</sub>
 </div>
