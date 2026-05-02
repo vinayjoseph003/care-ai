@@ -185,36 +185,42 @@ def display_response(result: dict):
         triage  = result.get('triage', 'SEE_DOCTOR')
         sources = result.get('sources', [])
 
-        risk_icon    = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🔴"}.get(risk, "⚪")
-        sev_icon     = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🔴", "EMERGENCY": "🚨"}.get(sev, "⚪")
-        verdict_icon = {"VERIFIED": "✅", "PARTIALLY_VERIFIED": "🟡", "UNVERIFIED": "🔴"}.get(verdict, "⚪")
+        # ── Plain-language reliability label ──────────────────────────────
+        # Never show "Hallucination Risk: HIGH" or "Fact-check: UNVERIFIED"
+        # to users — especially low-literacy Indian audience.
+        # Translate to a simple one-line reliability note instead.
+        if risk == "LOW" and verdict in ("VERIFIED", "PARTIALLY_VERIFIED"):
+            reliability_label = "✅  This answer is well-supported by medical sources."
+            show_doctor_note  = False
+        elif risk == "MEDIUM" or verdict == "PARTIALLY_VERIFIED":
+            reliability_label = "🟡  Some parts of this answer could not be fully verified. Please confirm with a doctor."
+            show_doctor_note  = True
+        else:  # HIGH / UNVERIFIED
+            reliability_label = "⚠️  This answer has low source support. Please see a doctor for proper advice."
+            show_doctor_note  = True
+
+        sev_icon = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🔴", "EMERGENCY": "🚨"}.get(sev, "⚪")
 
         # Header + answer text + XAI already streamed live by careai.py
-        # display_response() handles the footer sections
-
-        # [NEW] Treatment guidance
         display_treatment(result.get('treatment', {}), triage)
-
-        # [NEW] Red flags
         display_red_flags(result.get('red_flags', {}))
-
-        # [NEW] Mental health check-in
         display_mental_health(result.get('mental_health_msg', ''))
 
-        # Sources
         if sources:
             print("\n" + "─" * 64)
             print("  📚 Sources Referenced:")
             for s in sources:
                 print(f"    {s}")
 
-        # Metrics footer
+        # User-facing footer — plain language only
         print("\n" + "─" * 64)
-        print(f"  📊 Confidence      : {score}% {confidence_bar(score)}")
-        print(f"  {risk_icon} Hallucination Risk : {risk}")
-        print(f"  {verdict_icon} Fact-check        : {verdict}")
-        print(f"  {sev_icon} Severity           : {sev}")
-        print(f"  🌐 Language         : {lang}")
+        print(f"  {reliability_label}")
+        if show_doctor_note:
+            print(f"  💬 When in doubt, always visit your nearest doctor or health centre.")
+        print(f"  {sev_icon} Symptom Severity : {sev}")
+        print(f"  🌐 Language        : {lang}")
+        # Developer metrics (uncomment for debugging):
+        # print(f"  📊 Confidence: {score}%  |  Hallucination: {risk}  |  Fact-check: {verdict}")
         print("═" * 64 + "\n")
 
 

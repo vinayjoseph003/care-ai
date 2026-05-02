@@ -14,6 +14,15 @@
 import re, os, pickle, hashlib
 import numpy as np
 
+# ── Text-level hard filter for congenital/neonatal conditions ──────────────
+# Catches ICD-10 Q/P chunks even if their category label slips past the blocklist.
+_CONGENITAL_RE = re.compile(
+    r"\b(cleft palate|cleft lip|congenital|neonatal|newborn|chromosom"
+    r"|down syndrome|spina bifida|hirschsprung|phenylketonuria"
+    r"|cystic fibrosis|turner syndrome|klinefelter|trisomy)\b",
+    re.IGNORECASE,
+)
+
 
 class VectorStore:
     """
@@ -120,6 +129,13 @@ class VectorStore:
         "Pediatrics",
         "Complementary and Alternative Medicine",
         "Fluid and Electrolyte Disorders",
+        # ICD-10 prefix groups that produce irrelevant results
+        "Congenital",          # ICD-10 Q-codes: cleft palate, Down syndrome, etc.
+        "Pediatrics",          # ICD-10 P-codes: newborn/neonatal conditions
+        "Poisoning / Toxicology",  # ICD-10 T-codes variant label
+        "ENT",                 # Block ENT unless query is explicitly ear/nose/throat
+        "Ophthalmology",       # Block eye specialty unless query mentions eyes
+        "Dermatology",         # Block skin specialty unless query mentions skin
     }
 
     # Keywords that unlock a blocklisted category when present in the query.
@@ -140,6 +156,19 @@ class VectorStore:
         "Poisoning, Toxicology, Environmental Health": [
             "poison", "toxic", "overdose", "chemical",
             "carbon monoxide", "lead poisoning",
+        ],
+        "ENT": [
+            "ear", "nose", "throat", "sinus", "hearing", "tonsil",
+            "nasal", "rhinitis", "otitis", "laryngitis", "pharyngitis",
+            "snoring", "tinnitus", "vertigo", "hoarse", "adenoid",
+        ],
+        "Ophthalmology": [
+            "eye", "vision", "sight", "blind", "retina", "cornea",
+            "glaucoma", "cataract", "conjunctivitis", "pupil",
+        ],
+        "Dermatology": [
+            "skin", "rash", "itch", "acne", "eczema", "psoriasis",
+            "hives", "lesion", "mole", "dermatitis", "wound",
         ],
         "Older Adults": [
             "elderly", "geriatric", "nursing home",
@@ -187,6 +216,9 @@ class VectorStore:
         if self._is_blocklisted(category, query_lower):
             return False
         if not self._allowed_by_route(category, allowed_set):
+            return False
+        # Text-level safety net: block congenital/neonatal chunks regardless of category label
+        if _CONGENITAL_RE.search(doc.get('text', '')[:300]):
             return False
         return True
 
@@ -285,9 +317,11 @@ class VectorStore:
         Symptom-overlap + TF-IDF hybrid search with source locking.
         Passes query_category through to search() for routing.
         """
+        # Guard: if symptoms list is genuinely empty, fall back to plain TF-IDF
+        # using the full conversation text passed in (empty join would return nothing)
         if not symptoms:
-            return self.search(" ".join(symptoms), k=k,
-                               query_category=query_category)
+            return self.search("general symptom assessment", k=k,
+                               query_category=query_category or "SYMPTOM")
 
         sym_set     = {s.lower().strip() for s in symptoms}
         query       = " ".join(symptoms)
@@ -297,7 +331,7 @@ class VectorStore:
         )
 
         tfidf_results = {
-            r['id']: r['relevance_score']
+            r.get('id', r.get('text','')[:40]): r['relevance_score']
             for r in self.search(query, k=max(100, len(self.documents) // 10),
                                  query_category=query_category)
         }
@@ -310,10 +344,17 @@ class VectorStore:
 
             doc_syms = {s.lower().strip() for s in doc.get('symptoms', [])}
             overlap  = len(sym_set & doc_syms)
-            tfidf_sc = tfidf_results.get(doc['id'], 0)
+            tfidf_sc = tfidf_results.get(doc.get('id', doc.get('text','')[:40]), 0)
 
             if overlap > 0 or tfidf_sc > self.RELEVANCE_THRESHOLD:
-                combined = (overlap / max(len(sym_set), 1)) * 0.6 + tfidf_sc * 0.4
+                # Normalize by BOTH query and doc symptom counts.
+                # A 1/10 query coverage no longer scores the same as 1/1.
+                n_query   = max(len(sym_set), 1)
+                n_doc     = max(len(doc_syms), 1) if doc_syms else 1
+                coverage  = overlap / n_query          # recall-side
+                precision = overlap / n_doc            # precision-side
+                sym_score = (coverage + precision) / 2 # F1-inspired
+                combined  = sym_score * 0.6 + tfidf_sc * 0.4
                 scored.append({**doc, "relevance_score": round(combined, 4)})
 
         scored.sort(key=lambda x: x['relevance_score'], reverse=True)

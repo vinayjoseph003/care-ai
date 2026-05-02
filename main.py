@@ -27,16 +27,31 @@ def main():
     all_chunks, severity_map, precaution_map = build_all_chunks(data_dir="data")
 
     # ── Initialize bot ───────────────────────────────────────
-    api_key = os.environ.get("GROQ_API_KEY")
-    if not api_key:
-        print("❌ GROQ_API_KEY not found. Add it to your .env file.")
+    router_config = {
+        "openrouter_api_key": os.environ.get("OPENROUTER_API_KEY", ""),
+        "openrouter_model":   os.environ.get("OPENROUTER_MODEL",   "meta-llama/llama-3.3-70b-instruct:free"),
+        "groq_api_key":       os.environ.get("GROQ_API_KEY",       ""),
+        "groq_model":         os.environ.get("GROQ_MODEL",         "llama-3.3-70b-versatile"),
+        "gemini_api_key":     os.environ.get("GEMINI_API_KEY",     ""),
+        "gemini_model":       os.environ.get("GEMINI_MODEL",       "gemini-1.5-flash"),
+        "ollama_model":       os.environ.get("OLLAMA_MODEL",       "qwen2.5:7b"),
+        "ollama_host":        os.environ.get("OLLAMA_HOST",        "http://localhost:11434"),
+    }
+    has_cloud = any([
+        router_config["openrouter_api_key"],
+        router_config["groq_api_key"],
+        router_config["gemini_api_key"],
+    ])
+    if not has_cloud:
+        print("❌ No API key found. Add at least one of these to your .env:")
+        print("   OPENROUTER_API_KEY, GROQ_API_KEY, or GEMINI_API_KEY")
         return
 
     bot = CareAI(
         knowledge_chunks=all_chunks,
         severity_map=severity_map,
-        api_key=api_key,
-        precaution_map=precaution_map,   # ← [NEW]
+        router_config=router_config,
+        precaution_map=precaution_map,
     )
 
     # ── Greeting ─────────────────────────────────────────────

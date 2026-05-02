@@ -455,11 +455,78 @@ def parse_icd10(data_dir: str = "data") -> list:
     return chunks
 
 
+# ── SOURCE 5: NHS CONDITIONS ──────────────────────────────────
+
+# Common symptom words to extract from NHS chunk text.
+# These map to what users actually say, improving search_by_symptoms overlap.
+_NHS_SYMPTOM_WORDS = {
+    "pain", "ache", "aching", "sore", "soreness", "swelling", "swollen",
+    "fever", "temperature", "cough", "coughing", "breathless", "breathing",
+    "nausea", "vomiting", "diarrhoea", "diarrhea", "fatigue", "tired",
+    "tiredness", "headache", "dizziness", "dizzy", "rash", "itching",
+    "itchy", "discharge", "bleeding", "bleed", "lump", "tenderness",
+    "stiffness", "stiff", "weakness", "numbness", "tingling", "burning",
+    "cramps", "cramping", "bloating", "constipation", "loss of appetite",
+    "weight loss", "night sweats", "chills", "shivering", "confusion",
+    "memory loss", "anxiety", "depression", "insomnia", "palpitations",
+    "shortness of breath", "chest pain", "back pain", "joint pain",
+    "muscle pain", "stomach pain", "abdominal pain", "throat pain",
+    "earache", "ear pain", "eye pain", "skin irritation",
+}
+
+def _extract_nhs_symptoms(text: str) -> list:
+    """Pull symptom-like words from an NHS chunk text for overlap matching."""
+    text_lower = text.lower()
+    found = []
+    for sym in _NHS_SYMPTOM_WORDS:
+        if sym in text_lower:
+            found.append(sym)
+    return found
+
+
+def parse_nhs_chunks(data_dir: str = "data") -> list:
+    """
+    Load pre-parsed NHS condition chunks from data/nhs_chunks.json.
+
+    Workflow:
+      1. Run nhs_scraper.py  → data/nhs_raw.json
+      2. Run nhs_parser.py   → data/nhs_chunks.json
+      3. build_all_chunks()  picks them up here automatically.
+
+    If nhs_chunks.json is absent, this silently returns [] so the
+    rest of the knowledge base still loads normally.
+    """
+    import json
+    nhs_file = os.path.join(data_dir, "nhs_chunks.json")
+    if not os.path.exists(nhs_file):
+        print("ℹ️   nhs_chunks.json not found — skipping NHS source. "
+              "Run nhs_scraper.py + nhs_parser.py to generate it.")
+        return []
+    try:
+        with open(nhs_file, "r", encoding="utf-8") as f:
+            chunks = json.load(f)
+        # Inject extracted symptoms so search_by_symptoms() gets overlap on NHS chunks
+        for chunk in chunks:
+            if not chunk.get("symptoms"):
+                chunk["symptoms"] = _extract_nhs_symptoms(chunk.get("text", ""))
+        print(f"✅ NHS Conditions loaded: {len(chunks)} chunks")
+        return chunks
+    except Exception as e:
+        print(f"⚠️  NHS parse error: {e}")
+        return []
+
+
 # ── UNIFIED LOADER ────────────────────────────────────────────
 def build_all_chunks(data_dir: str = "data") -> tuple:
     """
     Returns (all_chunks, severity_map, precaution_map)
     ✅ Now returns precaution_map as the third element.
+    Sources:
+      1. Mendeley disease-symptom CSVs
+      2. MedQuAD Q&A files
+      3. MedlinePlus XML (NIH)
+      4. ICD-10-CM 2026
+      5. NHS Conditions (UK)  ← NEW
     """
     print("\n" + "="*55)
     print("  📚 Loading All Knowledge Sources")
@@ -467,24 +534,28 @@ def build_all_chunks(data_dir: str = "data") -> tuple:
 
     all_chunks = []
 
-    print("\n[1/4] Loading disease-symptom CSVs...")
+    print("\n[1/5] Loading disease-symptom CSVs...")
     dfs        = load_datasets(data_dir)
     csv_chunks = build_knowledge_chunks(dfs)
     sev_map    = get_symptom_severity_map(dfs)
-    prec_map   = build_precaution_map(dfs.get("precaution", pd.DataFrame()))  # [NEW]
+    prec_map   = build_precaution_map(dfs.get("precaution", pd.DataFrame()))
     all_chunks.extend(csv_chunks)
 
-    print("\n[2/4] Parsing MedQuAD Q&A files...")
+    print("\n[2/5] Parsing MedQuAD Q&A files...")
     mq_chunks  = parse_medquad(data_dir)
     all_chunks.extend(mq_chunks)
 
-    print("\n[3/4] Parsing MedlinePlus XML...")
+    print("\n[3/5] Parsing MedlinePlus XML...")
     mp_chunks  = parse_medlineplus(data_dir)
     all_chunks.extend(mp_chunks)
 
-    print("\n[4/4] Parsing ICD-10 codes...")
+    print("\n[4/5] Parsing ICD-10 codes...")
     icd_chunks = parse_icd10(data_dir)
     all_chunks.extend(icd_chunks)
+
+    print("\n[5/5] Loading NHS Conditions...")
+    nhs_chunks = parse_nhs_chunks(data_dir)
+    all_chunks.extend(nhs_chunks)
 
     print("\n" + "="*55)
     print(f"  ✅ TOTAL KNOWLEDGE BASE: {len(all_chunks)} chunks")
@@ -492,8 +563,9 @@ def build_all_chunks(data_dir: str = "data") -> tuple:
     print(f"     • MedQuAD Q&A         : {len(mq_chunks)}")
     print(f"     • MedlinePlus Topics  : {len(mp_chunks)}")
     print(f"     • ICD-10 Groups       : {len(icd_chunks)}")
+    print(f"     • NHS Conditions      : {len(nhs_chunks)}")
     print(f"     • Severity map        : {len(sev_map)} symptoms")
     print(f"     • Precaution map      : {len(prec_map)} diseases")
     print("="*55 + "\n")
 
-    return all_chunks, sev_map, prec_map   # ← [NEW] third return value
+    return all_chunks, sev_map, prec_map
