@@ -53,49 +53,25 @@ It combines **Retrieval-Augmented Generation (RAG)** over a rich multi-source me
 
 ## 🏗️ Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                      User Interface                     │
-│         Streamlit (ui/app.py) + CLI (main.py)           │
-└────────────────────────┬────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────┐
-│                    CareAI Bot (bot/)                     │
-│   • Conversational loop   • Query expansion             │
-│   • Session memory        • XAI log generation          │
-└────────────────────────┬────────────────────────────────┘
-                         │
-          ┌──────────────┴──────────────┐
-          │                             │
-┌─────────▼──────────┐      ┌──────────▼────────────────┐
-│  Vector Store       │      │     LLM Router             │
-│  (core/vector_      │      │  (core/llm_router.py)      │
-│   store.py)         │      │                            │
-│  • TF-IDF + cosine  │      │  1. OpenRouter (Llama-70B) │
-│  • Symptom overlap  │      │  2. Groq (Llama-70B)       │
-│  • BM25 scoring     │      │  3. Gemini (Flash)         │
-└─────────┬──────────┘      │  4. Ollama (local)         │
-          │                  └───────────────────────────┘
-┌─────────▼──────────────────────────────────────────────┐
-│                  Knowledge Base (core/)                  │
-│   Mendeley CSVs | MedQuAD | MedlinePlus | ICD-10 | NHS │
-└────────────────────────────────────────────────────────┘
-```
+The following diagram shows the modular architecture of CARE-AI, including UI, core bot logic, retrieval pipeline, and LLM routing.
 
-### LLM Fallback Chain
+<p align="center">
+  <img src="assets/images/architecture.png" width="750"/>
+</p>
 
-Care-AI uses a **sticky provider** strategy — once a provider succeeds, all subsequent calls in the session reuse it. Only falls back when rate-limited after retries:
+<p align="center"><i>Figure: CARE-AI system architecture</i></p>
 
-```
-OpenRouter (free, Llama-3.3-70B)
-    ↓ rate-limit / fail
-Groq (Llama-3.3-70B Versatile)
-    ↓ rate-limit / fail
-Gemini (gemini-2.0-flash-lite, 1500 req/day free)
-    ↓ rate-limit / fail
-Ollama (local, unlimited — guaranteed fallback)
-```
+---
 
+## 🔁 LLM Fallback Chain
+
+Care-AI uses a **sticky provider strategy** — once a provider succeeds, all subsequent calls in the session reuse it. It only falls back when rate-limited after retries.
+
+<p align="center">
+  <img src="assets/images/llms.png" width="700"/>
+</p>
+
+<p align="center"><i>Figure: LLM fallback mechanism with provider prioritization</i></p>
 ---
 
 ## 📚 Knowledge Sources
