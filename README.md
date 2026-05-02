@@ -1,3 +1,4 @@
+<img width="1536" height="1024" alt="architecture" src="https://github.com/user-attachments/assets/a16c6199-558a-40ed-b245-40aa383869a7" />
 <div align="center">
 
 <h1>🏥 Care-AI</h1>
@@ -55,11 +56,7 @@ It combines **Retrieval-Augmented Generation (RAG)** over a rich multi-source me
 
 The following diagram shows the modular architecture of CARE-AI, including UI, core bot logic, retrieval pipeline, and LLM routing.
 
-<p align="center">
-  <img src="assets/images/architecture.png" width="750"/>
-</p>
-
-<p align="center"><i>Figure: CARE-AI system architecture</i></p>
+<img width="1536" height="1024" alt="architecture" src="https://github.com/user-attachments/assets/d354f1f1-3ef8-447c-baa9-47223dc2361f" />
 
 ---
 
@@ -67,11 +64,8 @@ The following diagram shows the modular architecture of CARE-AI, including UI, c
 
 Care-AI uses a **sticky provider strategy** — once a provider succeeds, all subsequent calls in the session reuse it. It only falls back when rate-limited after retries.
 
-<p align="center">
-  <img src="assets/images/llms.png" width="700"/>
-</p>
+<img width="1536" height="1024" alt="llms" src="https://github.com/user-attachments/assets/c36eea7c-8298-468a-a3a4-b57d81b24b5b" />
 
-<p align="center"><i>Figure: LLM fallback mechanism with provider prioritization</i></p>
 ---
 
 ## 📚 Knowledge Sources
