@@ -297,6 +297,7 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 
 - **Vinay Joseph** – [@vinayjoseph003](https://github.com/vinayjoseph003)  
 - **Rohith** – [@rohithbojja07](https://github.com/rohithbojja07)
+- **Rani Chinthabathini** – [@ranichinthabathini](https://github.com/ranichinthabathini-byte)
 <div align="center">
   <sub>Built as a Final Year Engineering Project | Academic Research Prototype</sub>
 </div>
