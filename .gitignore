@@ -10,7 +10,8 @@ __pycache__/
 *.pyo
 
 # Cache folders
-cache/
+cache/*
+!cache/vector_index_v2.pkl
 
 # Logs
 logs/

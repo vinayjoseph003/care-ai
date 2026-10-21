@@ -4,7 +4,16 @@ Run with: python main.py
 """
 
 import os
+import sys
 from dotenv import load_dotenv
+
+# Ensure standard output and error support Unicode on Windows terminals
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
 from core.knowledge_base import build_all_chunks
 from bot  import CareAI
@@ -29,11 +38,11 @@ def main():
     # ── Initialize bot ───────────────────────────────────────
     router_config = {
         "openrouter_api_key": os.environ.get("OPENROUTER_API_KEY", ""),
-        "openrouter_model":   os.environ.get("OPENROUTER_MODEL",   "meta-llama/llama-3.3-70b-instruct:free"),
+        "openrouter_model":   os.environ.get("OPENROUTER_MODEL",   "meta-llama/llama-3.3-70b-instruct"),
         "groq_api_key":       os.environ.get("GROQ_API_KEY",       ""),
         "groq_model":         os.environ.get("GROQ_MODEL",         "llama-3.3-70b-versatile"),
         "gemini_api_key":     os.environ.get("GEMINI_API_KEY",     ""),
-        "gemini_model":       os.environ.get("GEMINI_MODEL",       "gemini-1.5-flash"),
+        "gemini_model":       os.environ.get("GEMINI_MODEL",       "gemini-3.5-flash-lite"),
         "ollama_model":       os.environ.get("OLLAMA_MODEL",       "qwen2.5:7b"),
         "ollama_host":        os.environ.get("OLLAMA_HOST",        "http://localhost:11434"),
     }

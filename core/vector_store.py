@@ -11,8 +11,18 @@
 #  - Both search() and search_by_symptoms() honour all three layers
 # ================================================================
 
-import re, os, pickle, hashlib
+import re, os, sys, pickle, hashlib
+from collections import Counter
 import numpy as np
+import scipy.sparse as sp
+
+# Ensure standard output and error support Unicode on Windows terminals
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
 # ── Text-level hard filter for congenital/neonatal conditions ──────────────
 # Catches ICD-10 Q/P chunks even if their category label slips past the blocklist.
@@ -26,27 +36,30 @@ _CONGENITAL_RE = re.compile(
 
 class VectorStore:
     """
-    TF-IDF vector store with disk caching.
-    First run: builds index (~3-5 min) → saves to cache/
-    Next runs: loads from cache (~5 seconds)
-    Cache invalidates automatically when documents change.
+    TF-IDF sparse vector store with versioned disk caching.
+    Uses SciPy CSR sparse representation to eliminate multi-gigabyte dense matrices.
+    First run: builds sparse index in a few seconds → saves versioned cache.
+    Next runs: loads from versioned cache in sub-second time.
+    Cache invalidates automatically when documents change or format version mismatches.
     """
     CACHE_DIR = "cache"
+    CACHE_VERSION = 2
+    DEFAULT_CACHE_NAME = "vector_index_v2"
 
-    def __init__(self, documents: list, cache_name: str = "vector_index"):
+    def __init__(self, documents: list, cache_name: str = DEFAULT_CACHE_NAME):
         self.documents  = documents
         self.cache_name = cache_name
         self.matrix = self.vocab = self.idf = None
         os.makedirs(self.CACHE_DIR, exist_ok=True)
 
         if self._load_cache():
-            print(f"✅ VectorStore loaded from cache: {len(documents)} documents. (~5s)")
+            print(f"✅ VectorStore loaded from cache (v{self.CACHE_VERSION} sparse): {len(documents)} documents.")
         else:
-            print(f"🔨 Building vector index for {len(documents)} documents...")
-            print(f"   ⏳ First run only — will be cached for future runs.")
+            print(f"🔨 Building sparse vector index for {len(documents)} documents...")
             self._build_index()
-            self._save_cache()
-            print(f"✅ VectorStore built and cached: {len(documents)} documents.")
+            if self.documents or self.cache_name != self.DEFAULT_CACHE_NAME:
+                self._save_cache()
+            print(f"✅ VectorStore built and cached (v{self.CACHE_VERSION} sparse): {len(documents)} documents.")
 
     def _cache_path(self):
         return os.path.join(self.CACHE_DIR, f"{self.cache_name}.pkl")
@@ -59,10 +72,12 @@ class VectorStore:
     def _save_cache(self):
         with open(self._cache_path(), 'wb') as f:
             pickle.dump({
-                "hash": self._doc_hash(),
-                "matrix": self.matrix,
-                "vocab":  self.vocab,
-                "idf":    self.idf,
+                "version": self.CACHE_VERSION,
+                "format":  "scipy_csr_v2",
+                "hash":    self._doc_hash(),
+                "matrix":  self.matrix,
+                "vocab":   self.vocab,
+                "idf":     self.idf,
             }, f, protocol=4)
         print(f"💾 Index cached → {self._cache_path()}")
 
@@ -70,13 +85,27 @@ class VectorStore:
         path = self._cache_path()
         if not os.path.exists(path):
             return False
+        # Safety guard: legacy dense cache files are several gigabytes.
+        # Reject immediately without deserializing to prevent Out-Of-Memory.
+        file_size = os.path.getsize(path)
+        if file_size > 500 * 1024 * 1024:
+            print(f"⚠️  Legacy multi-gigabyte cache file detected ({file_size / (1024*1024):.0f} MB) — rejecting to prevent OOM and rebuilding sparse index...")
+            return False
         try:
             with open(path, 'rb') as f:
                 data = pickle.load(f)
+            # Version check — reject incompatible or legacy cache format
+            if data.get("version") != self.CACHE_VERSION:
+                print(f"⚠️  Incompatible or legacy cache format detected (expected v{self.CACHE_VERSION}) — rebuilding sparse index...")
+                return False
             if data.get("hash") != self._doc_hash():
                 print("🔄 Data changed — rebuilding index...")
                 return False
-            self.matrix = data["matrix"]
+            mat = data.get("matrix")
+            if not isinstance(mat, sp.csr_matrix):
+                print("⚠️  Invalid matrix type in cache (expected scipy.sparse.csr_matrix) — rebuilding...")
+                return False
+            self.matrix = mat
             self.vocab  = data["vocab"]
             self.idf    = data["idf"]
             return True
@@ -88,24 +117,49 @@ class VectorStore:
         return re.findall(r'\b[a-z]{3,}\b', text.lower())
 
     def _build_index(self):
-        tokenized = [self._tokenize(d['text']) for d in self.documents]
-        vocab_set = sorted({w for toks in tokenized for w in toks})
-        self.vocab = {w: i for i, w in enumerate(vocab_set)}
+        tokenized = [self._tokenize(d.get('text', '')) for d in self.documents]
+        df_counts = Counter()
+        for toks in tokenized:
+            df_counts.update(set(toks))
+
+        vocab_list = sorted(df_counts.keys())
+        self.vocab = {w: i for i, w in enumerate(vocab_list)}
         V, N = len(self.vocab), len(self.documents)
 
-        tf = np.zeros((N, V), dtype=np.float32)
-        for i, toks in enumerate(tokenized):
-            for w in toks:
-                if w in self.vocab:
-                    tf[i][self.vocab[w]] += 1
-            if toks: tf[i] /= len(toks)
+        df_arr = np.array([df_counts[w] for w in vocab_list], dtype=np.float32)
+        self.idf = (np.log((N + 1) / (df_arr + 1)) + 1).astype(np.float32)
 
-        df       = np.sum(tf > 0, axis=0)
-        self.idf = (np.log((N + 1) / (df + 1)) + 1).astype(np.float32)
-        self.matrix = tf * self.idf
-        norms = np.linalg.norm(self.matrix, axis=1, keepdims=True)
-        norms[norms == 0] = 1
-        self.matrix /= norms
+        indptr = [0]
+        indices = []
+        data = []
+
+        for toks in tokenized:
+            if not toks:
+                indptr.append(len(indices))
+                continue
+            tok_counts = Counter(toks)
+            items = sorted((self.vocab[w], cnt) for w, cnt in tok_counts.items() if w in self.vocab)
+            if not items:
+                indptr.append(len(indices))
+                continue
+
+            doc_len = float(len(toks))
+            row_cols = [col for col, _ in items]
+            row_vals = np.array([(cnt / doc_len) * self.idf[col] for col, cnt in items], dtype=np.float32)
+            row_norm = float(np.linalg.norm(row_vals))
+            if row_norm > 0:
+                row_vals /= row_norm
+
+            indices.extend(row_cols)
+            data.extend(row_vals)
+            indptr.append(len(indices))
+
+        self.matrix = sp.csr_matrix(
+            (np.array(data, dtype=np.float32),
+             np.array(indices, dtype=np.int32),
+             np.array(indptr, dtype=np.int32)),
+            shape=(N, V)
+        )
 
     # ── [P3 — Source Locking] ─────────────────────────────────────────────
 
@@ -255,7 +309,7 @@ class VectorStore:
         if norm > 0:
             q /= norm
 
-        scores = self.matrix @ q
+        scores = self.matrix.dot(q)
 
         # Pull k*8 candidates — diversity filtering will shrink this down
         candidate_idx = np.argsort(scores)[::-1][:k * 8]

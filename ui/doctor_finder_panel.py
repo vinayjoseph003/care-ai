@@ -1,12 +1,13 @@
 # ================================================================
 #  ui/doctor_finder_panel.py — Doctor Finder UI for Care-AI
 #
-#  Premium redesign: styled hospital cards with distance badges,
-#  grid layout, colour-coded distance, OSM map links.
+#  Light medical theme redesign: clean white cards with teal/blue
+#  accents, distance badges, grid layout, OSM map links.
 #
 #  Requires:  pip install streamlit-js-eval
 # ================================================================
 
+import html
 import streamlit as st
 import urllib.parse
 
@@ -27,7 +28,7 @@ _CSS = """
 .df-section {
     margin: 1.8rem 0 0;
     padding-top: 1.2rem;
-    border-top: 1px solid rgba(57,208,216,0.15);
+    border-top: 1px solid #CBD5E0;
 }
 .df-section-header {
     display: flex;
@@ -37,8 +38,8 @@ _CSS = """
 }
 .df-section-icon {
     width: 32px; height: 32px;
-    background: rgba(57,208,216,0.1);
-    border: 1px solid rgba(57,208,216,0.25);
+    background: #CFFAFE;
+    border: 1px solid #0891B2;
     border-radius: 8px;
     display: flex; align-items: center; justify-content: center;
     font-size: 15px;
@@ -50,12 +51,12 @@ _CSS = """
     font-weight: 600;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: #39d0d8;
+    color: #0891B2;
 }
 .df-section-sub {
     font-family: 'Source Serif 4', Georgia, serif;
     font-size: 0.82rem;
-    color: rgba(125,133,144,0.9);
+    color: #4A5568;
     margin-bottom: 1rem;
     line-height: 1.5;
     padding-left: 42px;
@@ -70,11 +71,12 @@ _CSS = """
 }
 .df-card {
     position: relative;
-    border: 1px solid #30363d;
-    border-radius: 12px;
+    background: #FFFFFF;
+    border: 1px solid #CBD5E0;
+    border-radius: 14px;
     padding: 14px 16px 12px;
-    background: #161b22;
-    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    transition: box-shadow 0.2s, border-color 0.2s, transform 0.15s;
     text-decoration: none !important;
     color: inherit !important;
     display: block;
@@ -85,15 +87,15 @@ _CSS = """
     position: absolute;
     top: 0; left: 0; right: 0;
     height: 2px;
-    background: linear-gradient(90deg, #39d0d8, #388bfd);
+    background: linear-gradient(90deg, #0891B2, #2563EB);
     opacity: 0;
     transition: opacity 0.2s;
-    border-radius: 12px 12px 0 0;
+    border-radius: 14px 14px 0 0;
 }
 .df-card:hover {
-    border-color: rgba(57,208,216,0.4);
-    background: #1c2333;
-    transform: translateY(-2px);
+    border-color: #0891B2;
+    box-shadow: 0 6px 20px rgba(8,145,178,0.15);
+    transform: translateY(-3px);
 }
 .df-card:hover::before { opacity: 1; }
 
@@ -102,10 +104,10 @@ _CSS = """
     position: absolute;
     top: 12px; right: 12px;
     font-size: 14px;
-    opacity: 0.35;
+    opacity: 0.4;
     transition: opacity 0.2s;
 }
-.df-card:hover .df-card-map-icon { opacity: 0.8; }
+.df-card:hover .df-card-map-icon { opacity: 0.85; }
 
 /* Facility type badge */
 .df-card-type-badge {
@@ -118,32 +120,29 @@ _CSS = """
     padding: 2px 7px;
     border-radius: 4px;
     margin-bottom: 7px;
-    background: rgba(56,139,253,0.1);
-    color: #58a6ff;
-    border: 1px solid rgba(56,139,253,0.2);
 }
 .df-card-type-badge.badge-hospital {
-    background: rgba(57,208,216,0.1);
-    color: #39d0d8;
-    border-color: rgba(57,208,216,0.2);
+    background: #CFFAFE;
+    color: #0891B2;
+    border: 1px solid #0891B2;
 }
 .df-card-type-badge.badge-clinic {
-    background: rgba(56,139,253,0.1);
-    color: #58a6ff;
-    border-color: rgba(56,139,253,0.2);
+    background: #DBEAFE;
+    color: #2563EB;
+    border: 1px solid #2563EB;
 }
 .df-card-type-badge.badge-pharmacy {
-    background: rgba(63,185,80,0.1);
-    color: #3fb950;
-    border-color: rgba(63,185,80,0.2);
+    background: #DCFCE7;
+    color: #16A34A;
+    border: 1px solid #16A34A;
 }
 
 /* Name */
 .df-card-name {
     font-family: 'Source Serif 4', Georgia, serif;
     font-size: 0.92rem;
-    font-weight: 600;
-    color: #e6edf3;
+    font-weight: 700;
+    color: #1A202C;
     line-height: 1.35;
     margin-bottom: 10px;
     padding-right: 20px;
@@ -168,15 +167,15 @@ _CSS = """
 }
 /* Green ≤ 3km */
 .df-dist-near {
-    background: rgba(63,185,80,0.12);
-    color: #3fb950;
-    border: 1px solid rgba(63,185,80,0.25);
+    background: #DCFCE7;
+    color: #16A34A;
+    border: 1px solid #16A34A;
 }
 /* Amber > 3km */
 .df-dist-far {
-    background: rgba(210,153,34,0.12);
-    color: #d29922;
-    border: 1px solid rgba(210,153,34,0.25);
+    background: #FEF3C7;
+    color: #D97706;
+    border: 1px solid #D97706;
 }
 .df-dist-dot {
     width: 5px; height: 5px;
@@ -184,15 +183,15 @@ _CSS = """
     display: inline-block;
     flex-shrink: 0;
 }
-.df-dist-near .df-dist-dot { background: #3fb950; }
-.df-dist-far  .df-dist-dot { background: #d29922; }
+.df-dist-near .df-dist-dot { background: #16A34A; }
+.df-dist-far  .df-dist-dot { background: #D97706; }
 
 /* ── Count + radius note ────────────────────────────────────── */
 .df-results-meta {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.62rem;
     letter-spacing: 0.08em;
-    color: rgba(125,133,144,0.6);
+    color: #718096;
     margin-top: 0.4rem;
     padding: 0 2px;
 }
@@ -201,12 +200,12 @@ _CSS = """
 .df-disclaimer {
     font-family: 'Source Serif 4', Georgia, serif;
     font-size: 0.78rem;
-    color: rgba(125,133,144,0.7);
+    color: #92400E;
     margin-top: 0.7rem;
     padding: 8px 12px;
-    border-left: 2px solid rgba(57,208,216,0.2);
+    background: #FEF3C7;
+    border-left: 3px solid #D97706;
     line-height: 1.55;
-    background: rgba(57,208,216,0.03);
     border-radius: 0 6px 6px 0;
 }
 
@@ -214,11 +213,11 @@ _CSS = """
 .df-alert {
     font-family: 'Source Serif 4', Georgia, serif;
     font-size: 0.85rem;
-    color: rgba(245,158,11,0.9);
+    color: #92400E;
     padding: 10px 14px;
     border-radius: 8px;
-    border: 1px solid rgba(245,158,11,0.25);
-    background: rgba(245,158,11,0.06);
+    border: 1px solid #D97706;
+    background: #FEF3C7;
     line-height: 1.5;
 }
 
@@ -238,15 +237,15 @@ _CSS = """
     font-weight: 500;
     padding: 6px 14px;
     border-radius: 8px;
-    border: 1px solid #30363d;
-    background: #161b22;
-    color: #58a6ff !important;
+    border: 1px solid #CBD5E0;
+    background: #F7FAFC;
+    color: #2563EB !important;
     text-decoration: none !important;
     transition: border-color 0.15s, background 0.15s;
 }
 .df-manual-link:hover {
-    border-color: rgba(56,139,253,0.4);
-    background: #1c2333;
+    border-color: #2563EB;
+    background: #DBEAFE;
 }
 
 /* ── Info box ───────────────────────────────────────────────── */
@@ -256,11 +255,11 @@ _CSS = """
     gap: 8px;
     font-family: 'Source Serif 4', Georgia, serif;
     font-size: 0.84rem;
-    color: #7d8590;
+    color: #4A5568;
     padding: 8px 12px;
-    border: 1px solid #30363d;
+    border: 1px solid #CBD5E0;
     border-radius: 8px;
-    background: rgba(28,35,51,0.5);
+    background: #F7FAFC;
     margin-bottom: 0.5rem;
 }
 </style>
@@ -281,7 +280,7 @@ def _distance_info(distance_str: str) -> tuple[str, bool]:
     """Returns (pill_class, is_near)."""
     try:
         if "m" in distance_str and "km" not in distance_str:
-            return "df-dist-near", True          # metres → always near
+            return "df-dist-near", True
         val = float(distance_str.replace(" km", "").strip())
         return ("df-dist-near", True) if val <= 3.0 else ("df-dist-far", False)
     except Exception:
@@ -291,11 +290,11 @@ def _distance_info(distance_str: str) -> tuple[str, bool]:
 def _render_cards(results: list) -> str:
     cards = []
     for r in results:
-        dist_str    = r.get("distance_str", "?")
+        dist_str    = html.escape(str(r.get("distance_str", "?")))
         pill_class, _ = _distance_info(dist_str)
-        ftype       = r.get("facility_type", "Clinic")
+        ftype       = html.escape(str(r.get("facility_type", "Clinic")))
         badge_class = _facility_badge_class(ftype)
-        name        = r.get("name", "Unknown")
+        name        = html.escape(str(r.get("name", "Unknown")))
         lat, lon    = r.get("lat", 0), r.get("lon", 0)
         osm_url     = (
             f"https://www.openstreetmap.org/?mlat={lat}"
@@ -360,7 +359,7 @@ def render_doctor_finder(bot, response: dict):
   </div>
   <div class="df-section-sub">
     Based on your symptoms, we recommend seeing a <strong
-    style="color:#e6edf3">{specialist}</strong>.
+    style="color:#1A202C">{specialist}</strong>.
     Find verified facilities near you — tap any card to open on the map.
   </div>
 </div>

@@ -44,6 +44,7 @@
 # ================================================================
 
 import json, re, sys, time
+from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 
 from core.llm_router import LLMRouter
@@ -151,19 +152,36 @@ When giving a clinical assessment:
 
 
 class CareAI:
-    def __init__(self, knowledge_chunks: list, severity_map: dict,
-                 router_config: dict, precaution_map: dict = None,
+    def __init__(self, knowledge_chunks: list = None, severity_map: dict = None,
+                 router_config: dict = None, precaution_map: dict = None,
                  # Legacy arg — kept for backwards compat with existing main.py/app.py
-                 api_key: str = None):
+                 api_key: str = None,
+                 # Shared stateless resources (cached across sessions)
+                 vector_store: VectorStore = None,
+                 symptom_scorer: SymptomScorer = None,
+                 router: LLMRouter = None):
+        router_config = dict(router_config or {})
         # If caller passes legacy api_key (old interface), inject into config
         if api_key and not router_config.get("groq_api_key"):
             router_config["groq_api_key"] = api_key
 
-        self.router         = LLMRouter(router_config)
+        if router is not None:
+            self.router = router
+        else:
+            self.router = LLMRouter(router_config)
+
         # Keep .model for any code that inspects it (e.g., eval harness)
         self.model          = router_config.get("groq_model", "llama-3.3-70b-versatile")
-        self.vs             = VectorStore(knowledge_chunks)
-        self.scorer         = SymptomScorer(severity_map)
+        if vector_store is not None:
+            self.vs = vector_store
+        else:
+            self.vs = VectorStore(knowledge_chunks or [])
+
+        if symptom_scorer is not None:
+            self.scorer = symptom_scorer
+        else:
+            self.scorer = SymptomScorer(severity_map or {})
+
         self.precaution_map = precaution_map or {}
         self._reset_state()
         print("Care-AI ready!\n")
@@ -852,6 +870,11 @@ class CareAI:
             temp=0.4, max_tok=1200,
         )
         result_b = self._parse_json(raw_b, result_a)
+        # Guard: LLM sometimes returns a JSON array instead of object
+        if not isinstance(result_b, dict):
+            result_b = result_a
+        if not isinstance(result_a, dict):
+            result_a = {}
 
         diff_a = result_a.get('differential_diagnosis', [])
         diff_b = result_b.get('differential_diagnosis', [])
@@ -1512,13 +1535,17 @@ class CareAI:
         self.last_top_condition = diff[0]['condition'] if diff else ""
         print("done")
 
-        print("  Generating treatment guidance...", end=" ", flush=True)
+        print("  Generating treatment guidance and red flags...", end=" ", flush=True)
         if self.last_triage == "SELF_CARE":
-            treatment = self._get_selfcare_guidance(self.last_top_condition)
-            red_flags = self._get_red_flags(self.last_top_condition)
+            guidance_func = lambda: self._get_selfcare_guidance(self.last_top_condition)
         else:
-            treatment = self._get_treatment_guidance(self.last_top_condition, self.last_triage)
-            red_flags = self._get_red_flags(self.last_top_condition)
+            guidance_func = lambda: self._get_treatment_guidance(self.last_top_condition, self.last_triage)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            fut_treatment = executor.submit(guidance_func)
+            fut_red_flags = executor.submit(self._get_red_flags, self.last_top_condition)
+            treatment = fut_treatment.result()
+            red_flags = fut_red_flags.result()
         print("done")
 
         from utils.display import print_triage_header

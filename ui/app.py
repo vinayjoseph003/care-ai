@@ -7,6 +7,7 @@ Run with: streamlit run ui/app.py
 import os
 import sys
 import queue
+import html
 import threading
 import streamlit as st
 from dotenv import load_dotenv
@@ -20,6 +21,39 @@ from ui.doctor_finder_panel import render_doctor_finder
 
 load_dotenv()
 
+# Sync Streamlit Cloud secrets to os.environ if running in hosted environment
+try:
+    if hasattr(st, "secrets"):
+        for _sec_k, _sec_v in st.secrets.items():
+            if isinstance(_sec_v, (str, int, float, bool)) and _sec_k not in os.environ:
+                os.environ[_sec_k] = str(_sec_v)
+except Exception:
+    pass
+
+
+def _get_setting(key: str, default: str = "") -> str:
+    """Retrieve setting from os.environ or st.secrets (Streamlit Cloud)."""
+    val = os.environ.get(key)
+    if val:
+        return val
+    try:
+        if hasattr(st, "secrets") and key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    return default
+
+
+def sanitize_html(text: str, preserve_newlines: bool = True) -> str:
+    """Safely escape user and model text before inserting into HTML templates."""
+    if not text:
+        return ""
+    escaped = html.escape(str(text))
+    if preserve_newlines:
+        return escaped.replace("\n", "<br>")
+    return escaped
+
+
 # ════════════════════════════════════════════════════════════════════════════
 #  PAGE CONFIG
 # ════════════════════════════════════════════════════════════════════════════
@@ -28,29 +62,11 @@ st.set_page_config(
     page_title="Care-AI · Medical Assistant",
     page_icon="🏥",
     layout="wide",
-    # Always expanded — we reinforce this via session_state, not JS hacks
     initial_sidebar_state="expanded",
 )
 
 # ════════════════════════════════════════════════════════════════════════════
-#  SIDEBAR STATE — reliable fix using session_state, no JS needed
-#
-#  Strategy: track whether the user has manually collapsed the sidebar.
-#  On every run we check — if they haven't deliberately closed it, we call
-#  st.set_page_config with expanded=True equivalent by always writing the
-#  sidebar content. Streamlit's actual collapse button still works for the
-#  user when they want it, but programmatic reruns won't collapse it because
-#  we never call initial_sidebar_state="collapsed" again after first load.
-#
-#  The key insight: initial_sidebar_state only fires on the very first load.
-#  After that, Streamlit preserves the user's choice across reruns — meaning
-#  the sidebar randomly collapsing is caused by full page re-mounts (e.g.
-#  st.cache_resource loading). We fix this by ensuring bot loading happens
-#  BEFORE the first render, so the page never fully re-mounts mid-session.
-# ════════════════════════════════════════════════════════════════════════════
-
-# ════════════════════════════════════════════════════════════════════════════
-#  CUSTOM CSS — Clinical dark theme
+#  CUSTOM CSS — Light professional medical theme
 # ════════════════════════════════════════════════════════════════════════════
 
 st.markdown("""
@@ -59,28 +75,29 @@ st.markdown("""
 
 /* ── Design tokens ───────────────────────────────────────── */
 :root {
-  --bg:          #0a0e14;
-  --surface:     #0f1520;
-  --surface2:    #151d2e;
-  --surface3:    #1a2540;
-  --border:      #1e2d45;
-  --border-hi:   #2a3f5f;
-  --text:        #d4dde8;
-  --text-muted:  #5a7094;
-  --text-dim:    #3a5070;
-  --green:       #4ade80;
-  --green-dim:   #166534;
-  --yellow:      #fbbf24;
-  --yellow-dim:  #92400e;
-  --red:         #f87171;
-  --red-dim:     #7f1d1d;
-  --orange:      #fb923c;
-  --orange-dim:  #7c2d12;
-  --blue:        #60a5fa;
-  --teal:        #2dd4bf;
-  --teal-dim:    #0f4c46;
-  --accent:      #3b82f6;
-  --accent-dim:  #1e3a5f;
+  --bg:          #F0F4F8;
+  --surface:     #FFFFFF;
+  --surface2:    #F7FAFC;
+  --surface3:    #EDF2F7;
+  --border:      #CBD5E0;
+  --border-hi:   #A0AEC0;
+  --text:        #1A202C;
+  --text-muted:  #4A5568;
+  --text-dim:    #718096;
+  --green:       #16A34A;
+  --green-dim:   #DCFCE7;
+  --yellow:      #D97706;
+  --yellow-dim:  #FEF3C7;
+  --red:         #DC2626;
+  --red-dim:     #FEE2E2;
+  --orange:      #EA580C;
+  --orange-dim:  #FFEDD5;
+  --blue:        #2563EB;
+  --blue-dim:    #DBEAFE;
+  --teal:        #0891B2;
+  --teal-dim:    #CFFAFE;
+  --accent:      #2563EB;
+  --accent-dim:  #DBEAFE;
   --mono:        'IBM Plex Mono', 'Courier New', monospace;
   --serif:       'Source Serif 4', Georgia, serif;
   --radius-sm:   6px;
@@ -98,6 +115,7 @@ html, body, [class*="css"] {
 /* ── Hide Streamlit chrome ───────────────────────────────── */
 #MainMenu, footer, header { visibility: hidden; }
 .block-container {
+  background: transparent !important;
   padding: 1.6rem 2.2rem 4rem !important;
   max-width: 1160px;
 }
@@ -106,7 +124,7 @@ html, body, [class*="css"] {
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: var(--border-hi);
+  background: #CBD5E0;
   border-radius: 3px;
 }
 
@@ -137,7 +155,7 @@ html, body, [class*="css"] {
 .sb-brand-icon {
   width: 36px; height: 36px;
   background: linear-gradient(135deg, var(--teal-dim), var(--accent-dim));
-  border: 1px solid rgba(45,212,191,0.2);
+  border: 1px solid rgba(8,145,178,0.2);
   border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
   font-size: 16px;
@@ -156,6 +174,37 @@ html, body, [class*="css"] {
   font-size: 0.6rem;
   color: var(--text-muted) !important;
   letter-spacing: 0.08em;
+}
+
+/* Language badge — topmost prominent element */
+.sb-lang-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--teal-dim);
+  border: 1.5px solid var(--teal);
+  border-radius: 10px;
+  padding: 0.65rem 0.9rem;
+  margin-bottom: 0.7rem;
+}
+.sb-lang-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+.sb-lang-label {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--teal) !important;
+  margin-bottom: 0.15rem;
+}
+.sb-lang-value {
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text) !important;
+  line-height: 1.2;
 }
 
 /* Metric card */
@@ -264,8 +313,8 @@ html, body, [class*="css"] {
   color: var(--text-muted) !important;
   line-height: 1.55;
   padding: 0.7rem 0.9rem;
-  background: rgba(255,120,0,0.04);
-  border: 1px solid rgba(255,120,0,0.1);
+  background: rgba(217,119,6,0.05);
+  border: 1px solid rgba(217,119,6,0.15);
   border-radius: var(--radius-sm);
   margin-top: 0.5rem;
 }
@@ -335,15 +384,15 @@ html, body, [class*="css"] {
   margin: 0.6rem 0;
 }
 .user-bubble {
-  background: linear-gradient(135deg, var(--accent-dim), rgba(59,130,246,0.2));
-  border: 1px solid rgba(59,130,246,0.3);
+  background: var(--accent);
+  border: none;
   border-radius: 16px 16px 3px 16px;
   padding: 0.8rem 1.1rem;
   max-width: 72%;
   font-family: var(--serif);
   font-size: 0.93rem;
   line-height: 1.6;
-  color: #c8d8f0;
+  color: #FFFFFF;
 }
 
 /* Bot message container */
@@ -355,8 +404,8 @@ html, body, [class*="css"] {
 }
 .bot-avatar {
   width: 32px; height: 32px;
-  background: linear-gradient(135deg, var(--teal-dim), var(--accent-dim));
-  border: 1px solid rgba(45,212,191,0.25);
+  background: var(--teal-dim);
+  border: 1.5px solid var(--teal);
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 0.9rem;
@@ -374,9 +423,10 @@ html, body, [class*="css"] {
   line-height: 1.65;
   color: var(--text);
   flex: 1;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07);
 }
 
-/* Triage banner — inside bot bubble, above text */
+/* Triage banner */
 .triage-badge {
   display: inline-flex;
   align-items: center;
@@ -390,33 +440,30 @@ html, body, [class*="css"] {
   border-radius: 4px;
   margin-bottom: 0.8rem;
 }
-.triage-SELF_CARE   {
-  background: rgba(74,222,128,0.08);
-  color: var(--green);
-  border: 1px solid rgba(74,222,128,0.2);
+.triage-SELF_CARE {
+  background: #DCFCE7;
+  color: #15803D;
+  border: 1px solid #16A34A;
 }
-.triage-SEE_DOCTOR  {
-  background: rgba(251,191,36,0.08);
-  color: var(--yellow);
-  border: 1px solid rgba(251,191,36,0.2);
+.triage-SEE_DOCTOR {
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #D97706;
 }
 .triage-URGENT_CARE {
-  background: rgba(251,146,60,0.08);
-  color: var(--orange);
-  border: 1px solid rgba(251,146,60,0.2);
+  background: #FFEDD5;
+  color: #9A3412;
+  border: 1px solid #EA580C;
 }
-.triage-EMERGENCY   {
-  background: rgba(248,113,113,0.1);
-  color: var(--red);
-  border: 1px solid rgba(248,113,113,0.25);
-}
-/* Pulse animation for emergency */
 .triage-EMERGENCY {
+  background: #FEE2E2;
+  color: #991B1B;
+  border: 1px solid #DC2626;
   animation: triage-pulse 2s ease-in-out infinite;
 }
 @keyframes triage-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0); }
-  50%       { box-shadow: 0 0 0 4px rgba(248,113,113,0.1); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); }
+  50%       { box-shadow: 0 0 0 4px rgba(220,38,38,0.12); }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -443,12 +490,13 @@ html, body, [class*="css"] {
 }
 .diff-card {
   position: relative;
-  background: var(--surface2);
-  border: 1px solid var(--border);
+  background: #FFFFFF;
+  border: 1px solid #CBD5E0;
   border-radius: var(--radius-md);
   padding: 1rem 1.1rem 0.85rem;
   overflow: hidden;
   transition: border-color 0.2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
 }
 .diff-card:hover { border-color: var(--border-hi); }
 
@@ -474,15 +522,15 @@ html, body, [class*="css"] {
   width: 3px;
   border-radius: var(--radius-md) 0 0 var(--radius-md);
 }
-.diff-card.prob-high::before   { background: var(--red); }
-.diff-card.prob-medium::before { background: var(--yellow); }
-.diff-card.prob-low::before    { background: var(--green); }
+.diff-card.prob-high::before   { background: #DC2626; }
+.diff-card.prob-medium::before { background: #D97706; }
+.diff-card.prob-low::before    { background: #16A34A; }
 
 .diff-condition {
   font-family: var(--serif);
   font-size: 0.9rem;
   font-weight: 600;
-  color: var(--text);
+  color: #1A202C;
   margin-bottom: 0.5rem;
   line-height: 1.3;
   padding-right: 36px;
@@ -513,20 +561,20 @@ html, body, [class*="css"] {
 .diff-desc {
   font-family: var(--serif);
   font-size: 0.78rem;
-  color: var(--text-muted);
+  color: #4A5568;
   line-height: 1.5;
   margin-top: 0.45rem;
 }
 .diff-evidence {
   font-family: var(--mono);
   font-size: 0.67rem;
-  color: var(--yellow);
+  color: #92400E;
   margin-top: 0.4rem;
   line-height: 1.4;
   padding: 4px 8px;
-  background: rgba(251,191,36,0.05);
+  background: #FEF3C7;
   border-radius: 4px;
-  border-left: 2px solid rgba(251,191,36,0.3);
+  border-left: 2px solid #D97706;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -538,8 +586,8 @@ html, body, [class*="css"] {
   gap: 0.65rem;
 }
 .treatment-card {
-  background: var(--surface2);
-  border: 1px solid var(--border);
+  background: #FFFFFF;
+  border: 1px solid #CBD5E0;
   border-radius: var(--radius-md);
   padding: 0.85rem 1rem;
 }
@@ -581,17 +629,17 @@ html, body, [class*="css"] {
   margin: 0;
 }
 .treatment-card.escalation {
-  border-left: 2px solid var(--yellow);
-  background: rgba(251,191,36,0.03);
+  border-left: 3px solid #D97706;
+  background: #FFFBEB;
 }
 
 /* ══════════════════════════════════════════════════════════
    RED FLAGS BOX
 ══════════════════════════════════════════════════════════ */
 .redflag-box {
-  background: rgba(127,29,29,0.12);
-  border: 1px solid rgba(248,113,113,0.2);
-  border-left: 3px solid var(--red);
+  background: #FFF5F5;
+  border: 1px solid #FECACA;
+  border-left: 4px solid #DC2626;
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
   padding: 0.9rem 1.1rem;
 }
@@ -600,7 +648,7 @@ html, body, [class*="css"] {
   font-size: 0.62rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--red);
+  color: #DC2626;
   margin-bottom: 0.55rem;
   display: flex;
   align-items: center;
@@ -612,36 +660,36 @@ html, body, [class*="css"] {
   font-family: var(--serif);
   font-size: 0.85rem;
   line-height: 1.65;
-  color: #fca5a5;
+  color: #7F1D1D;
 }
 .redflag-threshold {
   margin-top: 0.55rem;
   font-family: var(--mono);
   font-size: 0.75rem;
-  color: var(--red);
+  color: #DC2626;
 }
 
 /* ══════════════════════════════════════════════════════════
    MENTAL HEALTH BANNER
 ══════════════════════════════════════════════════════════ */
 .mh-banner {
-  background: rgba(15,30,46,0.7);
-  border: 1px solid rgba(96,165,250,0.2);
-  border-left: 3px solid var(--blue);
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-left: 3px solid #2563EB;
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
   padding: 0.8rem 1.1rem;
   font-family: var(--serif);
   font-size: 0.88rem;
   line-height: 1.6;
-  color: #93c5fd;
+  color: #1E40AF;
 }
 
 /* ══════════════════════════════════════════════════════════
    XAI PANEL
 ══════════════════════════════════════════════════════════ */
 .xai-panel {
-  background: var(--surface2);
-  border: 1px solid var(--border);
+  background: #F0F9FF;
+  border: 1px solid #BAE6FD;
   border-radius: var(--radius-md);
   padding: 0.9rem 1.1rem;
 }
@@ -649,7 +697,7 @@ html, body, [class*="css"] {
   font-family: var(--serif);
   font-size: 0.88rem;
   line-height: 1.65;
-  color: var(--text);
+  color: #0C4A6E;
   margin: 0;
 }
 
@@ -670,9 +718,9 @@ html, body, [class*="css"] {
   border-radius: 4px;
   font-weight: 500;
 }
-.badge-low    { background: rgba(74,222,128,0.08); color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
-.badge-medium { background: rgba(251,191,36,0.08); color: var(--yellow); border: 1px solid rgba(251,191,36,0.2); }
-.badge-high   { background: rgba(248,113,113,0.1); color: var(--red); border: 1px solid rgba(248,113,113,0.25); }
+.badge-low    { background: #DCFCE7; color: #16A34A; border: 1px solid #16A34A; }
+.badge-medium { background: #FEF3C7; color: #D97706; border: 1px solid #D97706; }
+.badge-high   { background: #FEE2E2; color: #DC2626; border: 1px solid #DC2626; }
 
 .sources-wrap { margin-top: 0.6rem; }
 .sources-pills {
@@ -684,11 +732,11 @@ html, body, [class*="css"] {
 .source-pill {
   font-family: var(--mono);
   font-size: 0.63rem;
-  background: var(--surface2);
-  border: 1px solid var(--border);
+  background: #F7FAFC;
+  border: 1px solid #CBD5E0;
   border-radius: 20px;
   padding: 2px 10px;
-  color: var(--text-muted);
+  color: #4A5568;
   letter-spacing: 0.04em;
 }
 
@@ -696,8 +744,8 @@ html, body, [class*="css"] {
    EXPANDER OVERRIDES
 ══════════════════════════════════════════════════════════ */
 [data-testid="stExpander"] {
-  background: var(--surface) !important;
-  border: 1px solid var(--border) !important;
+  background: #FFFFFF !important;
+  border: 1px solid #CBD5E0 !important;
   border-radius: var(--radius-md) !important;
   margin-top: 0.5rem !important;
 }
@@ -723,8 +771,8 @@ html, body, [class*="css"] {
   padding-top: 0.8rem !important;
 }
 [data-testid="stChatInput"] textarea {
-  background: var(--surface) !important;
-  border: 1px solid var(--border) !important;
+  background: #FFFFFF !important;
+  border: 1.5px solid #CBD5E0 !important;
   color: var(--text) !important;
   font-family: var(--serif) !important;
   font-size: 0.92rem !important;
@@ -732,11 +780,11 @@ html, body, [class*="css"] {
   padding: 0.75rem 1rem !important;
 }
 [data-testid="stChatInput"] textarea:focus {
-  border-color: rgba(59,130,246,0.5) !important;
-  box-shadow: 0 0 0 3px rgba(59,130,246,0.08) !important;
+  border-color: var(--teal) !important;
+  box-shadow: 0 0 0 3px rgba(8,145,178,0.08) !important;
 }
 [data-testid="stChatInput"] textarea::placeholder {
-  color: var(--text-dim) !important;
+  color: #718096 !important;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -755,19 +803,22 @@ html, body, [class*="css"] {
 .empty-state {
   text-align: center;
   padding: 3.5rem 2rem;
-  color: var(--text-muted);
+  background: #FFFFFF;
+  border: 1px solid #CBD5E0;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
 }
 .empty-state-icon {
   font-size: 2.5rem;
   margin-bottom: 1rem;
-  opacity: 0.5;
+  opacity: 0.6;
 }
 .empty-state-title {
   font-family: var(--mono);
   font-size: 0.8rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: #1A202C;
   margin-bottom: 0.5rem;
 }
 .empty-state-langs {
@@ -781,15 +832,56 @@ html, body, [class*="css"] {
   font-family: var(--mono);
   font-size: 0.65rem;
   padding: 3px 10px;
-  border: 1px solid var(--border);
+  border: 1px solid #0891B2;
   border-radius: 20px;
-  color: var(--text-muted);
-  background: var(--surface2);
+  color: #0891B2;
+  background: #CFFAFE;
 }
 
 /* Streamlit spinner override */
 [data-testid="stSpinner"] > div {
   border-color: var(--teal) transparent transparent !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   SIDEBAR COLLAPSE / EXPAND BUTTON — make it visible on light bg
+══════════════════════════════════════════════════════════ */
+[data-testid="collapsedControl"] {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0 !important;
+  color: var(--text) !important;
+}
+[data-testid="collapsedControl"]:hover {
+  background: var(--surface3) !important;
+  border-color: var(--border-hi) !important;
+}
+[data-testid="collapsedControl"] svg {
+  fill: var(--text) !important;
+  stroke: var(--text) !important;
+}
+
+/* Sidebar expand/collapse arrow button (inside sidebar) */
+button[kind="header"],
+[data-testid="stSidebarNav"] button,
+section[data-testid="stSidebar"] button[aria-label="Close sidebar"],
+section[data-testid="stSidebar"] button[aria-label="Open sidebar"] {
+  background: var(--surface2) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+}
+section[data-testid="stSidebar"] button[aria-label="Close sidebar"] svg,
+section[data-testid="stSidebar"] button[aria-label="Open sidebar"] svg {
+  fill: var(--text) !important;
+  stroke: var(--text) !important;
+}
+
+/* Ensure sidebar never has a dark overlay */
+section[data-testid="stSidebar"] {
+  background: var(--surface) !important;
+}
+section[data-testid="stSidebar"]::before {
+  display: none !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -839,16 +931,16 @@ def _prob_css_class(prob_str: str) -> str:
 
 def _prob_fill_color(prob_str: str) -> str:
     p = str(prob_str).strip().upper()
-    if p == "HIGH":   return "var(--red)"
-    if p == "LOW":    return "var(--green)"
-    return "var(--yellow)"
+    if p == "HIGH":   return "#DC2626"
+    if p == "LOW":    return "#16A34A"
+    return "#D97706"
 
 
 def _prob_label_color(prob_str: str) -> str:
     p = str(prob_str).strip().upper()
-    if p == "HIGH":   return "var(--red)"
-    if p == "LOW":    return "var(--green)"
-    return "var(--yellow)"
+    if p == "HIGH":   return "#DC2626"
+    if p == "LOW":    return "#16A34A"
+    return "#D97706"
 
 
 def _risk_badge_class(risk: str) -> str:
@@ -863,16 +955,6 @@ def _risk_badge_class(risk: str) -> str:
 # ════════════════════════════════════════════════════════════════════════════
 
 def render_sidebar(bot):
-    """
-    Reliable sidebar rendering.
-
-    We render the sidebar unconditionally on every run. Streamlit preserves
-    the user's open/close choice between reruns automatically once the page
-    has fully mounted. The only time the sidebar disappears is when
-    `st.cache_resource` triggers a full re-mount; to prevent that we load
-    the bot BEFORE the first render (see init_session below) so the cache
-    is always warm by render time.
-    """
     with st.sidebar:
         # Brand
         st.markdown("""
@@ -884,6 +966,17 @@ def render_sidebar(bot):
   </div>
 </div>""", unsafe_allow_html=True)
 
+        # ── Detected language — topmost prominent badge ───────
+        lang = sanitize_html(getattr(bot, 'user_language', {}).get('language', '—'), preserve_newlines=False)
+        st.markdown(f"""
+<div class="sb-lang-badge">
+  <span class="sb-lang-icon">🌐</span>
+  <div>
+    <div class="sb-lang-label">Detected Language</div>
+    <div class="sb-lang-value">{lang}</div>
+  </div>
+</div>""", unsafe_allow_html=True)
+
         # ── Session metrics ───────────────────────────────────
         turns = len([m for m in st.session_state.messages
                      if m["role"] == "user"])
@@ -891,13 +984,6 @@ def render_sidebar(bot):
 <div class="sb-metric">
   <div class="sb-metric-label">Session Turns</div>
   <div class="sb-metric-value sv-teal">{turns}</div>
-</div>""", unsafe_allow_html=True)
-
-        lang = getattr(bot, 'user_language', {}).get('language', '—')
-        st.markdown(f"""
-<div class="sb-metric">
-  <div class="sb-metric-label">Detected Language</div>
-  <div class="sb-metric-value sv-blue">{lang}</div>
 </div>""", unsafe_allow_html=True)
 
         triage = getattr(bot, 'last_triage', None)
@@ -914,7 +1000,7 @@ def render_sidebar(bot):
   <div class="sb-metric-value {cls}">{m['icon']} {m['label']}</div>
 </div>""", unsafe_allow_html=True)
 
-        top = getattr(bot, 'last_top_condition', '')
+        top = sanitize_html(getattr(bot, 'last_top_condition', ''), preserve_newlines=False)
         if top:
             st.markdown(f"""
 <div class="sb-metric">
@@ -922,7 +1008,7 @@ def render_sidebar(bot):
   <div class="sb-metric-value sv-teal">{top}</div>
 </div>""", unsafe_allow_html=True)
 
-        spec = getattr(bot, 'last_specialist', '')
+        spec = sanitize_html(getattr(bot, 'last_specialist', ''), preserve_newlines=False)
         if spec:
             st.markdown(f"""
 <div class="sb-metric">
@@ -969,7 +1055,6 @@ def render_sidebar(bot):
             bot.reset()
             st.session_state.messages    = []
             st.session_state.last_result = None
-            # Clear doctor finder state too
             for k in list(st.session_state.keys()):
                 if k.startswith("df_"):
                     del st.session_state[k]
@@ -1012,11 +1097,11 @@ def render_differential(differential: list):
         key_evidence = d.get('key_evidence', '')
 
         desc_html = (
-            f'<div class="diff-desc">{description}</div>'
+            f'<div class="diff-desc">{sanitize_html(description)}</div>'
             if description else ''
         )
         evidence_html = (
-            f'<div class="diff-evidence">🔑 {key_evidence}</div>'
+            f'<div class="diff-evidence">🔑 {sanitize_html(key_evidence)}</div>'
             if key_evidence else ''
         )
 
@@ -1024,7 +1109,7 @@ def render_differential(differential: list):
             st.markdown(f"""
 <div class="diff-card {css_class}">
   <div class="diff-rank-badge">#{d.get('rank', i+1)}</div>
-  <div class="diff-condition">{d.get('condition', 'Unknown')}</div>
+  <div class="diff-condition">{sanitize_html(d.get('condition', 'Unknown'), False)}</div>
   <div class="diff-prob-row">
     <span class="diff-prob-label" style="color:{lbl_color}">{prob_raw}</span>
     <div class="diff-prob-bar">
@@ -1046,7 +1131,7 @@ def render_treatment(treatment: dict):
     esc   = treatment.get("escalation_timeline", "")
 
     def _li(items):
-        return "".join(f"<li>{i}</li>" for i in items) if items else "<li>—</li>"
+        return "".join(f"<li>{sanitize_html(i)}</li>" for i in items) if items else "<li>—</li>"
 
     st.markdown('<div class="treatment-grid">', unsafe_allow_html=True)
 
@@ -1087,7 +1172,7 @@ def render_treatment(treatment: dict):
     <div class="tc-icon">⏱</div>
     <div class="tc-title">Escalation Timeline</div>
   </div>
-  <p class="tc-escalation-text">{esc}</p>
+  <p class="tc-escalation-text">{sanitize_html(esc)}</p>
 </div>""", unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
@@ -1098,12 +1183,12 @@ def render_red_flags(red_flags: dict):
         return
     flags     = red_flags.get("red_flags", [])
     threshold = red_flags.get("emergency_threshold", "")
-    items_html = "".join(f"<li>{f}</li>" for f in flags)
+    items_html = "".join(f"<li>{sanitize_html(f)}</li>" for f in flags)
     st.markdown(f"""
 <div class="redflag-box">
   <div class="redflag-title">🚩 Warning Signs — Seek Immediate Care If You Notice:</div>
   <ul class="redflag-list">{items_html}</ul>
-  {f'<div class="redflag-threshold">{threshold}</div>' if threshold else ''}
+  {f'<div class="redflag-threshold">{sanitize_html(threshold)}</div>' if threshold else ''}
 </div>""", unsafe_allow_html=True)
 
 
@@ -1133,12 +1218,12 @@ def render_result_panels(result: dict, bot=None):
     if xai:
         with st.expander("💡  Why did I say this? (XAI)", expanded=False):
             st.markdown(
-                f'<div class="xai-panel"><p>{xai}</p></div>',
+                f'<div class="xai-panel"><p>{sanitize_html(xai)}</p></div>',
                 unsafe_allow_html=True
             )
 
     if mh_msg:
-        st.markdown(f'<div class="mh-banner">💙 {mh_msg}</div>',
+        st.markdown(f'<div class="mh-banner">💙 {sanitize_html(mh_msg)}</div>',
                     unsafe_allow_html=True)
 
     # ── Reliability badge ─────────────────────────────────────
@@ -1159,7 +1244,7 @@ def render_result_panels(result: dict, bot=None):
     # ── Sources ───────────────────────────────────────────────
     if sources:
         pills = "".join(
-            f'<span class="source-pill">{s}</span>' for s in sources
+            f'<span class="source-pill">{sanitize_html(s, False)}</span>' for s in sources
         )
         st.markdown(
             f'<div class="sources-wrap">'
@@ -1226,22 +1311,26 @@ def run_bot_in_thread(bot, user_message: str, tq: TokenQueue,
 
 
 # ════════════════════════════════════════════════════════════════════════════
-#  SESSION STATE INIT
+#  SESSION STATE INIT & RESOURCE CACHING
 # ════════════════════════════════════════════════════════════════════════════
 
 @st.cache_resource(show_spinner="Loading Care-AI knowledge base…")
-def load_bot():
+def load_shared_resources():
+    """
+    Load expensive, immutable resources (knowledge chunks, vector index,
+    symptom scorer, LLM router) once and share them across all user sessions.
+    """
     router_config = {
-        "openrouter_api_key": os.environ.get("OPENROUTER_API_KEY", ""),
-        "openrouter_model":   os.environ.get("OPENROUTER_MODEL",   "meta-llama/llama-3.3-70b-instruct:free"),
-        "groq_api_key":       os.environ.get("GROQ_API_KEY",       ""),
-        "groq_model":         os.environ.get("GROQ_MODEL",         "llama-3.3-70b-versatile"),
-        "gemini_api_key":     os.environ.get("GEMINI_API_KEY",     ""),
-        "gemini_model":       os.environ.get("GEMINI_MODEL",       "gemini-1.5-flash"),
-        "ollama_model":       os.environ.get("OLLAMA_MODEL",       "qwen2.5:7b"),
-        "ollama_host":        os.environ.get("OLLAMA_HOST",        "http://localhost:11434"),
+        "primary_provider":   _get_setting("LLM_PRIMARY_PROVIDER", "gemini"),
+        "openrouter_api_key": _get_setting("OPENROUTER_API_KEY", ""),
+        "openrouter_model":   _get_setting("OPENROUTER_MODEL",   "meta-llama/llama-3.3-70b-instruct"),
+        "groq_api_key":       _get_setting("GROQ_API_KEY",       ""),
+        "groq_model":         _get_setting("GROQ_MODEL",         "llama-3.3-70b-versatile"),
+        "gemini_api_key":     _get_setting("GEMINI_API_KEY",     ""),
+        "gemini_model":       _get_setting("GEMINI_MODEL",       "gemini-3.5-flash-lite"),
+        "ollama_model":       _get_setting("OLLAMA_MODEL",       "qwen2.5:7b"),
+        "ollama_host":        _get_setting("OLLAMA_HOST",        "http://localhost:11434"),
     }
-    # Require at least one cloud provider key
     has_cloud = any([
         router_config["openrouter_api_key"],
         router_config["groq_api_key"],
@@ -1249,18 +1338,50 @@ def load_bot():
     ])
     if not has_cloud:
         st.error(
-            "❌ No API key found. Add at least one of these to your .env:\n"
-            "OPENROUTER_API_KEY, GROQ_API_KEY, or GEMINI_API_KEY"
+            "❌ No LLM provider API key found. Please configure GEMINI_API_KEY or OPENROUTER_API_KEY "
+            "in your environment variables or Streamlit Secrets dashboard."
         )
         st.stop()
     all_chunks, severity_map, precaution_map = build_all_chunks(data_dir="data")
-    bot = CareAI(
-        knowledge_chunks=all_chunks,
-        severity_map=severity_map,
-        router_config=router_config,
-        precaution_map=precaution_map,
-    )
-    return bot
+    from core import VectorStore, SymptomScorer
+    from core.llm_router import LLMRouter
+    vs = VectorStore(all_chunks)
+    scorer = SymptomScorer(severity_map)
+    router = LLMRouter(router_config)
+    return {
+        "chunks":         all_chunks,
+        "severity_map":   severity_map,
+        "precaution_map": precaution_map,
+        "vector_store":   vs,
+        "symptom_scorer": scorer,
+        "router":         router,
+        "router_config":  router_config,
+    }
+
+
+def get_session_bot() -> CareAI:
+    """
+    Ensure each user session has its own isolated CareAI instance
+    (conversation history, detected language, collected info, triage state),
+    while referencing the shared cached knowledge base and vector store.
+    """
+    if "bot" not in st.session_state:
+        res = load_shared_resources()
+        st.session_state.bot = CareAI(
+            knowledge_chunks=res["chunks"],
+            severity_map=res["severity_map"],
+            precaution_map=res["precaution_map"],
+            vector_store=res["vector_store"],
+            symptom_scorer=res["symptom_scorer"],
+            router=res["router"],
+            router_config=res["router_config"],
+        )
+    return st.session_state.bot
+
+
+def load_bot() -> CareAI:
+    """Compatibility alias returning the per-session CareAI bot."""
+    return get_session_bot()
 
 
 def init_session():
@@ -1268,6 +1389,8 @@ def init_session():
         st.session_state.messages = []
     if "last_result" not in st.session_state:
         st.session_state.last_result = None
+    if "bot" not in st.session_state:
+        get_session_bot()
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1275,11 +1398,7 @@ def init_session():
 # ════════════════════════════════════════════════════════════════════════════
 
 def main():
-    # ── Load bot FIRST — before any render calls.
-    # This ensures st.cache_resource never triggers a mid-render re-mount,
-    # which is the root cause of the sidebar disappearing on first message.
-    bot = load_bot()
-
+    bot = get_session_bot()
     init_session()
 
     # ── Sidebar — unconditional, every run ───────────────────
@@ -1333,7 +1452,7 @@ def main():
             with st.chat_message("user"):
                 st.markdown(
                     f'<div class="user-msg-wrap">'
-                    f'<div class="user-bubble">{msg["content"]}</div>'
+                    f'<div class="user-bubble">{sanitize_html(msg["content"])}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -1350,7 +1469,7 @@ def main():
                 st.markdown(
                     f'<div class="bot-msg-wrap">'
                     f'<div class="bot-avatar">🏥</div>'
-                    f'<div class="bot-bubble">{msg["content"]}</div>'
+                    f'<div class="bot-bubble">{sanitize_html(msg["content"])}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -1361,11 +1480,10 @@ def main():
     if user_input := st.chat_input(
         "Describe your symptoms or ask a health question…"
     ):
-        # Render user bubble immediately
         with st.chat_message("user"):
             st.markdown(
                 f'<div class="user-msg-wrap">'
-                f'<div class="user-bubble">{user_input}</div>'
+                f'<div class="user-bubble">{sanitize_html(user_input)}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -1383,13 +1501,11 @@ def main():
             )
             t.start()
 
-            # Live streaming
             with st.spinner(""):
                 stream_placeholder = st.empty()
                 streamed_text = ""
 
                 for token in tq.token_gen():
-                    # Filter pipeline status lines
                     if any(token.startswith(p) for p in
                            ["🤔", "📖", "🩺", "🧠", "💊", "🔎", "✅", "🔧", "🔄"]):
                         continue
@@ -1397,7 +1513,7 @@ def main():
                     stream_placeholder.markdown(
                         f'<div class="bot-msg-wrap">'
                         f'<div class="bot-avatar">🏥</div>'
-                        f'<div class="bot-bubble">{streamed_text}▌</div>'
+                        f'<div class="bot-bubble">{sanitize_html(streamed_text)}▌</div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
@@ -1405,17 +1521,18 @@ def main():
                 t.join()
                 result = result_holder[0] if result_holder else {}
 
-            # ── Error in bot thread ───────────────────────────
             if result.get("type") == "error":
-                err_msg = result.get("message", "Unknown error")
+                err_msg = result.get("message", "Technical error")
                 err_tb  = result.get("traceback", "")
-                st.error(f"Bot error: {err_msg}")
-                if err_tb:
-                    with st.expander("Full traceback (for debugging)"):
-                        st.code(err_tb)
+                sys.stderr.write(f"[Care-AI Hosted Log] Error: {err_msg}\n{err_tb}\n")
+                clean_err_msg = (
+                    "Care-AI encountered an issue communicating with its clinical providers. "
+                    "Please wait a moment and try again."
+                )
+                st.error(clean_err_msg)
                 st.session_state.messages.append({
                     "role":    "assistant",
-                    "content": f"Something went wrong: {err_msg}",
+                    "content": clean_err_msg,
                     "triage":  None,
                     "result":  None,
                 })
@@ -1424,7 +1541,6 @@ def main():
             final_text = result.get("message", streamed_text)
             triage     = result.get("triage")
 
-            # Triage badge
             if triage and triage in TRIAGE_META:
                 m = TRIAGE_META[triage]
                 st.markdown(
@@ -1433,18 +1549,16 @@ def main():
                     unsafe_allow_html=True,
                 )
 
-            # Final text (replaces streaming cursor)
             stream_placeholder.markdown(
                 f'<div class="bot-msg-wrap">'
                 f'<div class="bot-avatar">🏥</div>'
-                f'<div class="bot-bubble">{final_text}</div>'
+                f'<div class="bot-bubble">{sanitize_html(final_text)}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
 
             render_result_panels(result, bot=bot)
 
-        # Store in history
         st.session_state.messages.append({
             "role":    "assistant",
             "content": final_text,

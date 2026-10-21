@@ -1,4 +1,21 @@
-groq
-numpy
-pandas
-python-dotenv
+# ================================================================
+# Care-AI Dependencies
+# Verified and tested under Python 3.12 (Linux & Windows)
+# ================================================================
+
+# LLM & API Clients
+groq==1.7.0
+requests==2.34.2
+python-dotenv==1.2.3
+
+# Data Processing & Numerical Computing
+numpy==2.5.3
+pandas==3.0.5
+scipy==1.18.1
+
+# Web Scraping & Parsing (NHS knowledge ingestion)
+beautifulsoup4==4.15.0
+
+# User Interface
+streamlit==1.63.0
+streamlit-js-eval==1.0.0

@@ -5,10 +5,19 @@
 # ================================================================
 
 import os
+import sys
 import re
 import csv
 import xml.etree.ElementTree as ET
 import pandas as pd
+
+# Ensure standard output and error support Unicode on Windows terminals
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
 
 def _get_col(df, keyword):

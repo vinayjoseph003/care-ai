@@ -18,7 +18,15 @@ Expect ~3-5 minutes on first run depending on machine speed.
 import os
 import sys
 
-CACHE_FILE = os.path.join("cache", "vector_index.pkl")
+# Ensure standard output and error support Unicode on Windows terminals
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+CACHE_FILE = os.path.join("cache", "vector_index_v2.pkl")
 
 
 def main():
