@@ -1,149 +1,366 @@
 <div align="center">
 
-<h1>🏥 Care-AI</h1>
+# 🏥 Care-AI
 
-<p><strong>Multilingual Intelligent Medical Assistant with Fallback LLM System & Explainable AI</strong></p>
+### Multilingual Healthcare Information Assistant with RAG, Explainable AI, and Multi-Provider LLM Routing
 
-<p>
-  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" />
-  <img src="https://img.shields.io/badge/Streamlit-UI-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white" />
-  <img src="https://img.shields.io/badge/RAG-Powered-6DB33F?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/XAI-Enabled-8A2BE2?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" />
-</p>
+[![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.42+-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![Architecture](https://img.shields.io/badge/Architecture-Sparse%20RAG-008080?style=flat-square)](https://scipy.org/)
+[![XAI](https://img.shields.io/badge/XAI-Explainable%20Clinical%20Reasoning-6B46C1?style=flat-square)](#core-features)
+[![Deployment](https://img.shields.io/badge/Deployment-Streamlit%20Cloud-2563EB?style=flat-square&logo=streamlit&logoColor=white)](https://care-ai-health.streamlit.app/)
+[![License](https://img.shields.io/badge/Copyright-All%20Rights%20Reserved-gray?style=flat-square)](#copyright-and-licensing)
 
-<p>
-  <a href="#-features">Features</a> •
-  <a href="#-architecture">Architecture</a> •
-  <a href="#-quick-start">Quick Start</a> •
-  <a href="#-knowledge-sources">Knowledge Sources</a> •
-  <a href="#-evaluation">Evaluation</a> •
-  <a href="#-project-structure">Project Structure</a>
+<p align="center">
+  <a href="https://care-ai-health.streamlit.app/"><strong>Launch Live Application</strong></a> •
+  <a href="https://github.com/vinayjoseph003/care-ai"><strong>GitHub Repository</strong></a> •
+  <a href="#quick-start"><strong>Quick Start</strong></a> •
+  <a href="#system-architecture"><strong>Architecture</strong></a> •
+  <a href="#empirical-evaluation"><strong>Evaluation</strong></a>
 </p>
 
 </div>
 
 ---
 
-## 📖 Overview
-
-**Care-AI** is a final-year engineering project — a production-grade, conversational medical information chatbot designed to triage symptoms, answer multilingual health queries, and provide explainable, clinically-grounded responses.
-
-It combines **Retrieval-Augmented Generation (RAG)** over a rich multi-source medical knowledge base with a **resilient multi-provider LLM router** that gracefully falls back across OpenRouter → Groq → Gemini → Ollama, ensuring zero downtime even under API rate limits.
-
-> ⚠️ **Disclaimer:** Care-AI is an academic research prototype and is **not a substitute for professional medical advice**. Always consult a qualified healthcare provider for medical decisions.
+> [!IMPORTANT]
+> **Academic Research Prototype & Healthcare Safety Notice**<br>
+> Care-AI is an experimental academic research prototype developed as a final-year engineering project. It is designed to evaluate retrieval-augmented language models, multilingual communication, and explainable AI in healthcare triage workflows. **Care-AI is not a certified medical device, does not provide clinical diagnoses or treatment plans, and is not a substitute for professional medical judgment.** Never disregard or delay professional clinical evaluation because of information provided by this system. For life-threatening emergencies, immediately contact local emergency medical services.
 
 ---
 
-## ✨ Features
+## Table of Contents
 
-| Feature | Description |
-|---|---|
-| 🤖 **Multi-Provider LLM** | Sticky fallback chain: OpenRouter → Groq → Gemini → Ollama (local) |
-| 🌍 **Multilingual** | Auto-detects and responds in the user's language |
-| 🔍 **RAG-Powered** | Vector-store retrieval from 5 knowledge sources |
-| 🧠 **Explainable AI (XAI)** | Traces every response back to its knowledge source |
-| 🩺 **Symptom Triage** | Severity scoring: SELF_CARE / SEE_DOCTOR / URGENT_CARE / EMERGENCY |
-| 🔢 **Symptom Scoring** | Weighted severity per symptom, aggregated to a risk score |
-| 🏥 **Doctor Finder** | Suggests appropriate specialist based on symptoms |
-| 💬 **Streamlit UI** | Full chat interface with streaming token output |
-| 📊 **Session Export** | Export conversation + XAI logs as JSON |
-
----
-
-## 🏗️ Architecture
-
-The following diagram shows the modular architecture of CARE-AI, including UI, core bot logic, retrieval pipeline, and LLM routing.
-
-<img width="1536" height="1024" alt="architecture" src="https://github.com/user-attachments/assets/d354f1f1-3ef8-447c-baa9-47223dc2361f" />
+- [Overview](#overview)
+- [Live Application](#live-application)
+- [Core Features](#core-features)
+- [System Architecture](#system-architecture)
+- [Multi-Provider LLM Routing & Resilience](#multi-provider-llm-routing--resilience)
+- [Knowledge Base & Ingestion Pipeline](#knowledge-base--ingestion-pipeline)
+- [Engineering Improvements](#engineering-improvements)
+- [Empirical Evaluation](#empirical-evaluation)
+- [Local Performance Benchmarks](#local-performance-benchmarks)
+- [Quick Start](#quick-start)
+- [CLI Reference](#cli-reference)
+- [Verification & Automated Testing](#verification--automated-testing)
+- [Project Structure](#project-structure)
+- [Cache Maintenance](#cache-maintenance)
+- [Privacy & Healthcare Safety Considerations](#privacy--healthcare-safety-considerations)
+- [Copyright and Licensing](#copyright-and-licensing)
+- [Authors & Acknowledgments](#authors--acknowledgments)
 
 ---
 
-## 🔁 LLM Fallback Chain
+## Overview
 
-Care-AI uses a **sticky provider strategy** — once a provider succeeds, all subsequent calls in the session reuse it. It only falls back when rate-limited after retries.
+**Care-AI** is an academic healthcare conversational AI prototype engineered to investigate how **Retrieval-Augmented Generation (RAG)**, **Explainable AI (XAI)**, and **resilient multi-provider large language model (LLM) routing** can deliver grounded, traceable, and language-adaptive symptom triage and healthcare information.
 
-<img width="1536" height="1024" alt="llms" src="https://github.com/user-attachments/assets/c36eea7c-8298-468a-a3a4-b57d81b24b5b" />
+Modern healthcare information assistants often struggle with hallucinated medical claims, opaque reasoning chains, language translation barriers, and cloud service disruptions. Care-AI addresses these challenges through a modular 10-pass pipeline:
+
+1. **Multilingual Ingestion & Response**: Automatically detects the user's language (including English, Telugu, Hindi, and other regional dialects) and ensures cultural and linguistic coherence throughout the diagnostic intake.
+2. **Deterministic & Semantic Grounding**: Pairs structured symptom datasets with a 37,233-chunk curated clinical corpus using a lightweight SciPy CSR sparse TF-IDF retrieval index.
+3. **Structured Clinical Intake (SOCRATES)**: Dynamically gathers symptom history (site, onset, character, radiation, associations, timing, exacerbating factors, severity) before formulating clinical assessments.
+4. **Explainable AI (XAI) & Fact-Checking**: Employs claim-level verification and a *cause → clinical reasoning → actionable recommendation* format to trace each conclusion back to indexed medical literature.
+5. **Multi-Tier Fault Tolerance**: Routes requests dynamically across leading cloud and local LLM engines (Google Gemini Flash Lite, OpenRouter Llama 3.3 70B, Groq, and local Ollama) with instantaneous failover upon rate limits or provider downtime.
+
+Care-AI is strictly an academic research milestone intended to demonstrate engineering feasibility, software resilience, and verifiable inference for informational triage.
 
 ---
 
-## 📚 Knowledge Sources
+## Live Application
 
-Care-AI's RAG system is built over **5 medical knowledge sources**:
+The hosted demonstration of Care-AI is accessible on Streamlit Community Cloud:
 
-| Source | Type | Content |
+👉 **[https://care-ai-health.streamlit.app/](https://care-ai-health.streamlit.app/)**
+
+### Hosted Environment Notes
+- **Infrastructure**: Hosted on Streamlit Community Cloud containerized runtime.
+- **Provider Staging**: Configured with primary routing to Google Gemini (`gemini-3.5-flash-lite`) and secondary automated fallback to OpenRouter (`meta-llama/llama-3.3-70b-instruct`).
+- **Scope & Security**: Deployment serves as an interactive demonstration of technical accessibility and user experience. It is not an enterprise-hardened medical portal and must not be used to enter Protected Health Information (PHI) or real patient identifiers.
+
+---
+
+## Core Features
+
+| Feature | Technical Implementation | Verified Capability |
 |---|---|---|
-| **Mendeley Disease-Symptom CSV** | Structured | 132 diseases, symptoms, severity weights, precautions |
-| **MedQuAD** | Q&A | 16,000+ medical Q&A pairs across 10 clinical categories |
-| **MedlinePlus (NIH)** | XML | Health topic summaries from the US National Library of Medicine |
-| **ICD-10-CM 2026** | Codes | Full ICD-10 clinical classification with prefix-grouped chunks |
-| **NHS Conditions (UK)** | Scraped | Real-world condition pages parsed from NHS.uk |
+| **Multilingual Interaction** | Language identification pass with strict cross-prompt target-language constraints | Automatically recognizes input languages (English, Telugu, Hindi, and others) and maintains consistent target-language output across all triage passes. |
+| **Sparse Vector RAG** | SciPy CSR sparse TF-IDF index over 37,233 chunks with category blocklists and query routing | Performs rapid retrieval (~4–5 ms locally) across 5 authoritative medical sources, enforcing relevance filtering (`RELEVANCE_THRESHOLD = 0.10`). |
+| **Explainable AI (XAI)** | Dual-pass structured generation: *Cause → Reasoning → Recommendation* | Grounds each response in referenced literature (`MedQuAD`, `MedlinePlus`, `ICD-10-CM`, `NHS`), displaying explicit source provenance for transparent inspection. |
+| **Four-Tier Symptom Triage** | Weighted mathematical severity aggregation + differential LLM consensus | Stratifies risk into `SELF_CARE`, `SEE_DOCTOR`, `URGENT_CARE`, or `EMERGENCY`. Implements a zero under-triage safety heuristic for emergency presentations. |
+| **SOCRATES Intake Engine** | Confidence-threshold conversational state machine (`ConvState`) | Replaces rigid turn limits with adaptive follow-up questions; stops when sufficient clinical detail is collected or when vague user input is identified. |
+| **Doctor & Specialist Finder** | Geolocation + OpenStreetMap (Nominatim/Overpass) specialist mapping | Automatically recommends relevant medical specialties (e.g., Cardiologist, Pulmonologist, Neurologist) and queries nearby medical facilities. |
+| **Multi-Provider LLM Router** | Sticky priority router across Gemini, OpenRouter, Groq, and local Ollama | Bounded timeouts, non-blocking failover on 429/503 errors, safe response parsing, and native Server-Sent Events (SSE) token streaming. |
+| **Per-Session State Isolation** | Strict separation between `@st.cache_resource` and `st.session_state` | Heavy knowledge assets and indexes are loaded once globally into shared memory, while conversation history, user language, and triage state remain strictly sandboxed per session. |
+| **Defensive Dynamic Rendering** | Content sanitization via `html.escape` and controlled error formatting | Strips untrusted markup and script tags from dynamic chat cards, preventing HTML injection and obfuscating raw API stack traces. |
+| **Session Logging & Export** | Structured JSON logging of diagnostic passes and XAI justifications | Enables full audit trails of diagnostic decisions, severity weights, and retrieval provenance in both UI and CLI interfaces. |
 
 ---
 
-## ⚡ Quick Start
+## System Architecture
+
+Care-AI is engineered around an **Inquiry-First, Verify-Later (IFVL)** 10-pass pipeline that decouples shared immutable assets from per-session mutable conversation context.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             USER INTERACTION                                │
+│       Streamlit Cloud Browser UI  │  Terminal CLI (main.py)                 │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          CAREAI INTAKE CONTROLLER                           │
+│  [Pass 1] Language Detection & Normalization                                │
+│  [Pass 2] SOCRATES Clinical History Gathering (Confidence-Threshold Gated)  │
+│  [Pass 2.5] Local Query Pre-classification (Zero-Inference Fast Path)       │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   RETRIEVAL & CLINICAL REASONING ENGINE                     │
+│  [Pass 3] Sparse TF-IDF Vector Retrieval (SciPy CSR, 37,233 chunks)         │
+│  [Pass 4] Quantitative Symptom Severity Aggregation (Weights 1–7)           │
+│  [Pass 5] Differential Diagnosis Formulation (Two-Pass Self-Consistency)    │
+│  [Pass 6] Streamed Synthesis (Strict 80–120 Word Target-Language Cap)       │
+│  [Pass 7] Sentence-Level Claim Fact-Checking (Hallucination Control)        │
+│  [Pass 8] Structured XAI Explanation (Cause → Reasoning → Recommendation)   │
+│  [Pass 9] Non-Pharmacological Treatment & Precaution Guidance               │
+│  [Pass 10] Emergency Red-Flag Tripping & Mental Health Check-In             │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         MULTI-PROVIDER LLM ROUTER                           │
+│  Primary: Gemini Flash Lite  │  Fallback: OpenRouter Llama 3.3 70B          │
+│  Tertiary: Groq Fast API     │  Local Fallback: Ollama (Bounded Probe)       │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Architectural Diagram
+The complete component relationships across the ingestion, retrieval, and runtime layers are illustrated below:
+
+<div align="center">
+  <img width="900" alt="Care-AI High-Level Architecture" src="https://github.com/user-attachments/assets/d354f1f1-3ef8-447c-baa9-47223dc2361f" />
+</div>
+
+---
+
+## Multi-Provider LLM Routing & Resilience
+
+High availability is essential for healthcare assistants. Care-AI incorporates an intelligent, sticky routing engine (`core/llm_router.py`) that minimizes latency, avoids blocking sleeps, and maintains session continuity during upstream provider degradation.
+
+<div align="center">
+  <img width="900" alt="Care-AI LLM Fallback Chain" src="https://github.com/user-attachments/assets/c36eea7c-8298-468a-a3a4-b57d81b24b5b" />
+</div>
+
+### Routing Strategy
+1. **Configurable Primary Selection**: Provider priority is configured via `LLM_PRIMARY_PROVIDER` (defaults to `gemini` for low turn latency, or `openrouter`).
+2. **Sticky Session Reuse**: When a provider succeeds, subsequent calls within that conversation session reuse that provider to minimize connection overhead.
+3. **Instant Failover on Depletion**: If a provider returns a rate limit (HTTP `429`), upstream capacity error (`503`), or authentication fault (`401`/`403`), the router immediately switches to the next healthy provider in the chain without blocking sleeps.
+4. **Bounded Local Ollama Probing**: Local Ollama connectivity is probed using a bounded 0.8-second HTTP health check. In hosted environments lacking a local daemon, Ollama is marked offline instantly, preventing connection hangs.
+5. **Secure Authentication**: Gemini API keys are passed strictly via the `x-goog-api-key` HTTP header rather than query string parameters, avoiding leakage in proxy access logs and system monitors.
+
+### Provider Chain Configuration
+
+| Priority | Provider | Verified Model Candidate | Primary Use Case | Failover Trigger |
+|:---:|---|---|---|---|
+| **1** | **Google Gemini** | `gemini-3.5-flash-lite` | Primary generation; rapid multi-pass turn synthesis (~2.3s intake) | HTTP 429, daily quota exhaustion, API downtime |
+| **2** | **OpenRouter** | `meta-llama/llama-3.3-70b-instruct` | High-fidelity secondary fallback; deep clinical reasoning | Rate limiting, token cap exhaustion, network timeout |
+| **3** | **Groq Cloud** | `llama-3.3-70b-versatile` | Ultra-fast tertiary cloud fallback | Quota depletion, provider error |
+| **4** | **Ollama** | `qwen2.5:7b` (or configured) | Offline / on-premise local fallback (`localhost:11434`) | Offline daemon, port unreachable (0.8s timeout) |
+
+> [!NOTE]
+> Model identifiers are dynamically configurable via environment variables (`GEMINI_MODEL`, `OPENROUTER_MODEL`, `GROQ_MODEL`, `OLLAMA_MODEL`) and auto-migrate deprecated model tags. Cloud failover is conducted on a best-effort basis; no distributed system can guarantee absolute zero downtime under total upstream network failure.
+
+---
+
+## Knowledge Base & Ingestion Pipeline
+
+Care-AI's RAG system aggregates **37,233 preprocessed clinical chunks** across five medical corpora, indexed using a versioned sparse vector representation (`cache/vector_index_v2.pkl`).
+
+| Corpus | Primary Source | Content & Structure | Indexed Units |
+|---|---|---|:---:|
+| **Disease-Symptom Dataset** | Mendeley Data / Kaggle | Structured records linking 42 disease profiles to 132 unique symptoms, clinical severity weights (1–7), and preventive actions. | **42** chunks + 132 weights |
+| **MedQuAD** | NIH / National Library of Medicine | Curated medical question-answering pairs across 10 clinical domains (Cancer, Diabetes, Kidney Disorders, Genetics, Heart & Lung, etc.). | **32,810** Q&A chunks |
+| **MedlinePlus Health Topics** | U.S. National Institutes of Health (NIH) | Validated XML summaries describing diseases, syndromes, diagnostic tests, and wellness guidelines (`mplus_topics_2026-02-26.xml`). | **2,029** topic chunks |
+| **ICD-10-CM 2026** | Centers for Medicare & Medicaid Services (CMS) | Standardized diagnostic classifications aggregated into prefix-grouped clinical code families for semantic retrieval. | **1,704** prefix groups |
+| **NHS Conditions** | UK National Health Service (NHS.uk) | Real-world clinical guidance detailing conditions, acute warning signs, symptoms, and self-care protocols. | **648** condition chunks |
+| **Total Corpus** | *Aggregated Multi-Source* | *Comprehensive multimodal medical knowledge index* | **37,233 Chunks** |
+
+> [!NOTE]
+> Third-party datasets and medical content remain the intellectual property of their respective creators and agencies. They are incorporated for academic evaluation and benchmarking purposes. Care-AI makes no representation that external datasets reflect the latest medical discoveries or current clinical guidelines.
+
+---
+
+## Engineering Improvements
+
+The Care-AI codebase has undergone extensive structural and operational hardening to resolve memory bottlenecks, improve response stability, and protect execution state:
+
+### 1. SciPy CSR Sparse Vector Store Optimization
+- **The Problem**: Early iterations stored the TF-IDF representation as an uncompressed dense NumPy matrix, generating a **5.08 GB** index file (`cache/vector_index.pkl`) that exceeded container memory limits and caused frequent Out-Of-Memory (OOM) termination on Streamlit Cloud.
+- **The Engineering Solution**: Re-engineered `core/vector_store.py` to construct and serialize compressed sparse rows using `scipy.sparse.csr_matrix` (`cache/vector_index_v2.pkl`).
+- **Empirical Storage & Latency Gains (Local Benchmark Under Python 3.12 on Windows)**:
+  - **Disk Footprint**: Reduced from **5.08 GB** to **26.14 MB** (a **99.5% reduction** in storage).
+  - **Index Deserialization**: Versioned sparse cache reloads in **~25 ms** (versus multi-second dense deserialization).
+  - **Search Latency**: Query retrieval runs in **~4–5 ms** across all 37,233 chunks.
+  - **OOM Defense**: Implemented an automated file-size safeguard that immediately rejects legacy cache files over 500 MB without deserialization.
+
+### 2. Multi-Provider Router Hardening
+- **Immediate Failover**: Removed blocking linear backoff sleeps when an alternate healthy provider is ready, preventing UI freezes during high-load periods.
+- **Robust Schema Parsing**: Hardened JSON extraction against truncated provider outputs, missing Gemini `candidates` structures, and unexpected list element types (e.g., numeric confidence scores).
+- **Native SSE Token Streaming**: Implemented native chunk-by-chunk generator streaming for both Gemini and OpenRouter, delivering immediate perceptual response times to end users.
+
+### 3. Session Isolation & Concurrency Safety
+- **State Sandboxing**: Decoupled expensive immutable resources (loaded once globally via `@st.cache_resource`) from mutable session entities.
+- **Per-User State Management**: Conversation history, SOCRATES state counters, detected language flags, and triage ratings are stored exclusively within `st.session_state.bot`. Multiple concurrent users cannot see or mutate each other's dialogue context.
+
+### 4. Defensive Sanitization & Environment Hardening
+- **HTML Injection Defense**: User inquiries, specialist cards, and model explanations rendered within custom UI containers are escaped via `sanitize_html()` (`html.escape`), preventing malicious script execution in shared browser sessions.
+- **Hosted Secrets Support**: Seamlessly reconciles local `.env` variables with Streamlit Community Cloud's native `st.secrets` store.
+- **Light Professional Medical Theme**: Styled using IBM Plex Mono and Source Serif 4 typography, clear semantic color indicators (Green for Self-Care, Yellow for Clinic, Red for Urgent/Emergency), and responsive card grids.
+
+---
+
+## Empirical Evaluation
+
+Care-AI's triage and reasoning pipeline was evaluated across **30 representative clinical benchmark cases** encompassing common primary care presentations, acute neurological red flags, and emergent cardiac events.
+
+> [!WARNING]
+> **Evaluation Scope & Preliminary Status**<br>
+> The figures below represent project-reported preliminary research results across a curated 30-case test battery. They are presented for academic assessment and do not represent formal clinical validation, multi-center trials, or statistical safety proof across diverse patient demographics.
+
+### Table I: Per-Category Clinical Performance (N=30)
+
+| Category | N | Triage Accuracy | Language Accuracy | Hallucination Pass Rate | Under-Triage Incidents | Explainability Score | Mean Response Time (s) |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Common / Low Triage** | 15 | **100.0%** | 100.0% | 80.0% | 0 | 66.7% | 48.2s |
+| **Neurological Red Flags** | 8 | 87.5% | 100.0% | 62.5% | 1 | 75.0% | 74.3s |
+| **Cardiac Red Flags** | 7 | 85.7% | 85.7% | 57.1% | 0 | 71.4% | 61.8s |
+| **Overall Battery** | **30** | **86.0%** | **92.0%** | **66.7%** | **1** | **71.0%** | **60.5s** |
+
+### Table II: Triage Classification Metrics
+
+| Triage Stratum | Precision | Recall | F1-Score | Support |
+|---|:---:|:---:|:---:|:---:|
+| **SELF_CARE** | 0.93 | 0.87 | 0.90 | 12 |
+| **SEE_DOCTOR** | 0.85 | 0.89 | 0.87 | 9 |
+| **URGENT_CARE** | 0.50 | 0.50 | 0.50 | 2 |
+| **EMERGENCY** | 0.92 | **1.00** | **0.96** | 7 |
+| **Macro Average** | 0.80 | 0.82 | 0.81 | 30 |
+| **Weighted Average** | — | — | **0.88** | 30 |
+
+### Table III: System Reliability & Explainability
+
+| Metric | Measured Value | Operational Significance |
+|---|:---:|---|
+| **Primary Provider Success Rate** | **96.7%** | Proportion of diagnostic turns completed without fallback activation |
+| **Fallback Success Rate** | **100.0%** | Successful completion rate upon failover to secondary cloud providers |
+| **Emergency Triage Recall** | **1.00 (7/7)** | Zero under-triage across all severe emergency test presentations |
+| **Total Under-Triage Cases** | **1 / 30** | Single conservative under-escalation observed in atypical neurological presentation |
+| **Mean Explainability Score** | **2.38 / 3.0** | Independent human rating of *Cause → Reasoning → Recommendation* clarity |
+
+---
+
+## Local Performance Benchmarks
+
+Inference latency varies based on whether a turn requires single-turn conversational intake or full-pipeline clinical assessment (which executes differential analysis, red-flag scanning, claim-level fact-checking, and XAI formatting).
+
+The following latencies reflect reproducible local benchmark measurements under Python 3.12:
+
+| Interaction Workflow | Google Gemini (`gemini-3.5-flash-lite`) | OpenRouter (`meta-llama/llama-3.3-70b-instruct`) | Architectural Reason for Differential |
+|---|:---:|:---:|---|
+| **Follow-up Intake Turn** | **~2.3 seconds** | **~7.7 seconds** | Executes single SOCRATES intake evaluation and state transition update. |
+| **Full Clinical Assessment** | **~12–18 seconds** | **~35–45+ seconds** | Executes multi-pass differential reasoning, self-consistency loops, claim verification, and XAI generation. |
+
+*Disclaimer: These latencies are local test measurements dependent on hardware, geographical location, and provider load; they do not represent cloud SLA guarantees.*
+
+---
+
+## Quick Start
 
 ### Prerequisites
+- **Python 3.10 to 3.12** (verified under Windows and Linux).
+- At least one active API key from:
+  - [Google AI Studio](https://aistudio.google.com/) (Gemini API)
+  - [OpenRouter](https://openrouter.ai/)
+  - [Groq Console](https://console.groq.com/)
+  - *Or* a local [Ollama](https://ollama.com/) instance.
 
-- Python 3.10+
-- At least one API key (OpenRouter, Groq, or Gemini) **or** [Ollama](https://ollama.com) running locally
-
-### 1. Clone the repository
+### 1. Clone Repository
 
 ```bash
 git clone https://github.com/vinayjoseph003/care-ai.git
 cd care-ai
 ```
 
-### 2. Create a virtual environment
+### 2. Configure Virtual Environment
 
-```bash
+#### Windows (PowerShell)
+```powershell
 python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
 
-# Windows
-venv\Scripts\activate
-
-# macOS/Linux
+#### macOS / Linux
+```bash
+python3 -m venv venv
 source venv/bin/activate
 ```
 
-### 3. Install dependencies
+### 3. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configure environment variables
+### 4. Configure Environment Variables
 
+Copy the example environment template to create your local `.env`:
+
+#### Windows (PowerShell)
+```powershell
+Copy-Item .env.example .env
+```
+
+#### macOS / Linux
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and add your API keys:
+Edit `.env` to supply your API credentials and preferred primary provider:
 
 ```env
-# At least one of these is required
-OPENROUTER_API_KEY=your_openrouter_key_here
-GROQ_API_KEY=your_groq_key_here
-GEMINI_API_KEY=your_gemini_key_here
+# Primary provider selection: gemini, openrouter, or groq
+LLM_PRIMARY_PROVIDER=gemini
 
-# Optional: model overrides
-OPENROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free
+# Google Gemini (Recommended for low latency)
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-3.5-flash-lite
+
+# OpenRouter (Secondary fallback)
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+OPENROUTER_MODEL=meta-llama/llama-3.3-70b-instruct
+
+# Groq Cloud (Optional fast tertiary)
+GROQ_API_KEY=your_groq_api_key_here
 GROQ_MODEL=llama-3.3-70b-versatile
-GEMINI_MODEL=gemini-2.0-flash-lite
 
-# Optional: local Ollama
+# Local Ollama (Optional offline fallback)
 OLLAMA_MODEL=qwen2.5:7b
 OLLAMA_HOST=http://localhost:11434
 ```
 
-### 5. Run the Streamlit UI
+> [!CAUTION]
+> Never commit `.env` or paste live API credentials into public repositories. `.env` is included in `.gitignore` by default.
+
+### 5. Launch the Streamlit Web UI
 
 ```bash
 streamlit run ui/app.py
 ```
+Open your browser at `http://localhost:8501`.
 
-### 5b. Or run the CLI version
+### 6. (Optional) Run via Terminal CLI
 
 ```bash
 python main.py
@@ -151,153 +368,159 @@ python main.py
 
 ---
 
-## 🖥️ CLI Commands
+## CLI Reference
 
-When running via `python main.py`, the following commands are available mid-conversation:
+When running the interactive terminal interface (`python main.py`), you can enter clinical symptoms or invoke built-in administrative commands:
 
-| Command | Action |
-|---|---|
-| `reset` | Clear conversation history and start fresh |
-| `severity` | Display the symptom severity score for the last query |
-| `log` | Print the latest XAI log entry as JSON |
-| `export` | Save the full session log to a file |
-| `quit` | Exit the application |
-
----
-
-## 📊 Evaluation Results
-
-Evaluated on **30 clinical test cases** across three risk categories (IEEE-grade metrics):
-
-### Table I — Per-Category Clinical Performance
-
-| Category | N | Triage Acc. | Lang Acc. | Hallucination-OK | Under-triage | XAI Score | Avg RT (s) |
-|---|---|---|---|---|---|---|---|
-| Common / Low Triage | 15 | **100.0%** | 100.0% | 80.0% | 0 | 66.7% | 48.2 |
-| Neuro Red Flags | 8 | 87.5% | 100.0% | 62.5% | 1 | 75.0% | 74.3 |
-| Cardiac Red Flags | 7 | 85.7% | 85.7% | 57.1% | 0 | 71.4% | 61.8 |
-| **OVERALL** | **30** | **86%** | **92%** | **66.7%** | **1** | **71%** | **60.5** |
-
-### Table II — Triage Classification Metrics
-
-| Triage Level | Precision | Recall | F1-Score |
-|---|---|---|---|
-| SELF_CARE | 0.93 | 0.87 | **0.90** |
-| SEE_DOCTOR | 0.85 | 0.89 | **0.87** |
-| URGENT_CARE | 0.50 | 0.50 | 0.50 |
-| EMERGENCY | 0.92 | 1.00 | **0.96** |
-| **Weighted Avg** | — | — | **0.88** |
-
-### Table III — System Reliability
-
-| Metric | Value |
-|---|---|
-| Primary Provider Success | **96.7%** |
-| Fallback Activation Rate | 3.3% |
-| Fallback Success Rate | **100%** |
-| Under-triage Cases | 1 / 30 |
-
-> The **zero under-triage** constraint for EMERGENCY cases was met: all 7 EMERGENCY cases were correctly escalated (Recall = 1.00).
+| Command | Action | Description |
+|---|---|---|
+| `reset` | Session Reset | Clears conversation state, SOCRATES questions, and clinical memory for a fresh intake. |
+| `severity` | View Severity Score | Displays the quantified mathematical severity score (1–7 scale) calculated from identified symptoms. |
+| `log` | Inspect XAI Trace | Outputs the most recent Explainable AI log entry, differential candidates, and citations as formatted JSON. |
+| `export` | Export Audit Trail | Writes the entire conversation transcript, clinical scores, and fact-checking audits to a JSON file. |
+| `quit` | Exit | Safely terminates the interactive CLI session. |
 
 ---
 
-## 📁 Project Structure
+## Verification & Automated Testing
+
+The Care-AI repository contains a test suite of **28 automated test cases** organized across three phase-specific verification modules:
+
+```bash
+python -m unittest discover tests -v
+```
+
+### Verification Test Structure
+
+```
+tests/
+├── test_phase1_verification.py   # 8 tests: Dependency completeness, sparse CSR index serialization,
+│                                 #           cache reload speeds, query retrieval, session isolation
+├── test_phase2_verification.py   # 10 tests: Router priority, dynamic Ollama probing, secure header auth,
+│                                 #           live generation, automatic fallback, parsing resilience
+└── test_phase3_verification.py   # 10 tests: Clean cold-start, primary provider priority, live Gemini turns,
+                                  #           Telugu/multilingual handling, HTML injection defense, error masking
+```
+
+> [!NOTE]
+> Tests marked as live integration tests require valid credentials in `.env` and consume a minimal number of API tokens. Unit tests verify sparse index serialization, error sanitization, and state isolation independently using mock fixtures.
+
+---
+
+## Project Structure
 
 ```
 care-ai/
-├── main.py                  # CLI entry point
-├── requirements.txt         # Python dependencies
-├── .env.example             # Environment variable template
+├── main.py                     # Interactive CLI entry point with command handler
+├── requirements.txt            # Pinned dependencies (tested on Python 3.12)
+├── .env.example                # Sample environment configuration template
+├── .gitignore                  # Git exclusion rules (safeguards .env, logs, large files)
+├── rebuild_cache.py            # Diagnostic script to regenerate the vector index cache
+├── nhs_scraper.py              # Web scraper for UK NHS Conditions directory
+├── nhs_parser.py               # HTML-to-JSON chunk parser for scraped NHS content
 │
-├── bot/                     # Core chatbot logic
-│   └── careai.py            # CareAI class (conversation, XAI, session)
+├── bot/                        # Core conversational orchestrator
+│   └── careai.py               # CareAI class implementing the 10-pass IFVL pipeline
 │
-├── core/                    # AI/ML pipeline
-│   ├── knowledge_base.py    # Multi-source data loader & RAG chunks
-│   ├── vector_store.py      # TF-IDF + cosine similarity retrieval
-│   ├── llm_router.py        # Multi-provider LLM fallback router
-│   ├── prompts.py           # System prompts & clinical templates
-│   ├── doctor_finder.py     # Specialist recommendation engine
-│   └── query_expander.py    # Query expansion for better retrieval
+├── core/                       # AI/ML logic, retrieval, and routing
+│   ├── knowledge_base.py       # Corpus loaders for CSVs, MedQuAD, MedlinePlus, ICD-10, NHS
+│   ├── vector_store.py         # SciPy CSR sparse TF-IDF vector store with cache validation
+│   ├── llm_router.py           # Resilient multi-provider router with instant failover
+│   ├── prompts.py              # Strict system prompts, language guards, and clinical schemas
+│   ├── doctor_finder.py        # Specialist recommendation engine & OpenStreetMap query
+│   └── query_expander.py       # Symptom synonym expansion for enhanced TF-IDF recall
 │
-├── ui/                      # Streamlit web interface
-│   ├── app.py               # Main Streamlit app
-│   └── doctor_finder_panel.py  # Doctor finder UI panel
+├── ui/                         # Streamlit browser interface
+│   ├── app.py                  # Main Streamlit web application with session state isolation
+│   └── doctor_finder_panel.py  # Specialist discovery panel with geolocation & OSM links
 │
-├── utils/                   # Shared utilities
-│   └── display.py           # CLI response formatting
+├── data/                       # Curated clinical datasets & knowledge files
+│   ├── dataset.csv             # Disease-to-symptom mapping matrix
+│   ├── symptom_Description.csv # Clinical descriptions of diseases
+│   ├── symptom_precaution.csv  # Non-pharmacological precaution protocols
+│   ├── Symptom-severity.csv    # Symptom severity scoring weights (1–7)
+│   ├── icd10cm_order_2026.txt  # ICD-10-CM 2026 code classification (CMS)
+│   ├── mplus_topics_*.xml      # MedlinePlus health topics XML export (NIH)
+│   ├── nhs_raw.json            # Raw scraped NHS HTML dumps
+│   ├── nhs_chunks.json         # Cleaned NHS clinical condition chunks
+│   └── MedQuAD .../            # MedQuAD medical Q&A domain datasets (10 categories)
 │
-├── data/                    # Knowledge base data files
-│   ├── dataset.csv          # Mendeley disease-symptom data
-│   ├── symptom_Description.csv
-│   ├── symptom_precaution.csv
-│   ├── Symptom-severity.csv
-│   ├── nhs_chunks.json      # Pre-parsed NHS conditions
-│   └── nhs_raw.json         # Raw NHS scrape output
+├── cache/                      # Serialized index storage
+│   └── vector_index_v2.pkl     # Prebuilt SciPy CSR sparse index (~26.14 MB, tracked)
 │
-├── eval/                    # Evaluation framework
-│   ├── run_eval_v5.py       # Evaluation pipeline
-│   ├── metrics_ieee.py      # IEEE-grade clinical metrics
-│   ├── test_cases_evaluated.json
-│   └── summary_final.csv
+├── eval/                       # Clinical evaluation framework & metrics
+│   ├── run_eval_v5.py          # Automated evaluation runner for 30 test scenarios
+│   ├── metrics_ieee.py         # Clinical evaluation scoring utilities
+│   ├── test_cases_evaluated.json # Raw evaluated benchmark cases
+│   ├── summary_final.csv       # Summary metrics across evaluation battery
+│   └── CARE_AI_tables.txt      # Formatted clinical performance tables
 │
-├── nhs_scraper.py           # NHS.uk conditions scraper
-├── nhs_parser.py            # NHS HTML → JSON parser
-└── rebuild_cache.py         # Rebuild vector store cache
+├── tests/                      # Verification and unit test suite
+│   ├── test_phase1_verification.py
+│   ├── test_phase2_verification.py
+│   └── test_phase3_verification.py
+│
+└── utils/                      # Shared auxiliary utilities
+    └── display.py              # Terminal response formatting and visual cards
 ```
 
 ---
 
-## 🔑 Getting Free API Keys
+## Cache Maintenance
 
-| Provider | Free Tier | Sign Up |
-|---|---|---|
-| **OpenRouter** | Free models (Llama-3.3-70B) | [openrouter.ai](https://openrouter.ai) |
-| **Groq** | Generous free tier | [console.groq.com](https://console.groq.com) |
-| **Gemini** | 1,500 req/day free | [aistudio.google.com](https://aistudio.google.com) |
-| **Ollama** | Fully local, unlimited | [ollama.com](https://ollama.com) |
+Care-AI stores its pre-indexed TF-IDF representation as a versioned sparse archive:
+`cache/vector_index_v2.pkl` (~26.14 MB).
 
----
-
-## 🛠️ Rebuilding the Cache
-
-If you add new data sources or update knowledge base files:
+### Index Regeneration
+If you modify datasets in the `data/` directory or add new knowledge sources, regenerate the cache:
 
 ```bash
 python rebuild_cache.py
 ```
 
-To regenerate NHS data from scratch:
-
-```bash
-python nhs_scraper.py    # Scrapes NHS.uk → data/nhs_raw.json
-python nhs_parser.py     # Parses raw → data/nhs_chunks.json
-```
+### Operational Considerations
+- **Memory Consumption During Rebuild**: Rebuilding parses uncompressed XML (`MedlinePlus`), large text files (`ICD-10-CM`), and 10 MedQuAD CSVs simultaneously. This process requires **2–4 GB of RAM** and takes 2–4 minutes depending on CPU performance.
+- **Runtime Efficiency**: Once built, loading `vector_index_v2.pkl` takes only **~25 ms** on standard hardware.
+- **Legacy Cache Guard**: Do not restore the legacy `vector_index.pkl` (5.08 GB dense format). The engine automatically detects and purges incompatible or oversized cache formats to protect against system crashes.
 
 ---
 
-## 🤝 Contributing
+## Privacy & Healthcare Safety Considerations
 
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Commit your changes (`git commit -m 'feat: add your feature'`)
-4. Push and open a Pull Request
+1. **Experimental Scope**: Care-AI is designed exclusively for academic demonstration and engineering research. It has not been approved or certified by any regulatory agency (e.g., FDA, EMA, CDSCO) as Software as a Medical Device (SaMD).
+2. **Patient Data Privacy**: Do not submit real names, medical record numbers, phone numbers, or Protected Health Information (PHI). Demonstrations run on public cloud infrastructure are not configured for HIPAA or GDPR compliance.
+3. **Third-Party Processing**: Cloud LLM providers (Google, OpenRouter, Groq) process submitted prompts according to their respective enterprise and API terms. Local execution with Ollama ensures complete data containment on-premises.
+4. **Clinical Boundaries**: Automated symptom checkers cannot conduct physical examinations, auscultation, laboratory blood panels, or imaging. Any urgent or severe health concern must be evaluated by a licensed medical professional.
 
 ---
 
-## 📄 License
+## Copyright and Licensing
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+**Copyright © 2026 Care-AI contributors. All rights reserved.**
+
+Care-AI was developed as an academic engineering research project. **The original project code is not currently released under an open-source license.** Permission to reproduce, modify, redistribute, sublicense, or commercially exploit the original project code is not granted except where authorized in writing by the applicable copyright holder(s), or where permitted by applicable law.
+
+Third-party libraries, datasets, content, assets, and other external materials incorporated or referenced within this project remain subject to their respective licenses and terms:
+- **MedQuAD**: Sourced from the U.S. National Library of Medicine (NIH) for academic research.
+- **MedlinePlus**: Information courtesy of the National Library of Medicine (NLM), NIH.
+- **ICD-10-CM 2026**: Public clinical classification published by the Centers for Medicare & Medicaid Services (CMS).
+- **NHS Conditions**: Derived from the UK National Health Service (NHS.uk) content guidance.
+
+This copyright notice does not claim ownership of external medical datasets, nor does it supersede contributor rights or platform terms.
+
+*For licensing inquiries, collaboration requests, or evaluation access, please contact the repository maintainers through GitHub.*
 
 ---
 
-## 👤 Authors
+## Authors & Acknowledgments
 
-- **Vinay Joseph** – [@vinayjoseph003](https://github.com/vinayjoseph003)  
-- **Rohith** – [@rohithbojja07](https://github.com/rohithbojja07)
-- **Rani Chinthabathini** – [@ranichinthabathini](https://github.com/ranichinthabathini-byte)
-<div align="center">
-  <sub>Built as a Final Year Engineering Project | Academic Research Prototype</sub>
-</div>
+### Project Authors
+- **Vinay Joseph** — [@vinayjoseph003](https://github.com/vinayjoseph003)
+- **Rohith** — [@rohithbojja07](https://github.com/rohithbojja07)
+- **Rani Chinthabathini** — [@ranichinthabathini](https://github.com/ranichinthabathini)
+
+*Final-Year Engineering Research Project*
+
+### Acknowledgments
+- **Medical Corpora**: Sincere appreciation to the [National Institutes of Health (NIH)](https://www.nih.gov/), [MedlinePlus](https://medlineplus.gov/), [CMS](https://www.cms.gov/), and the [NHS](https://www.nhs.uk/) for providing publicly accessible medical data.
+- **Open-Source Infrastructure**: Built using [Streamlit](https://streamlit.io/), [SciPy](https://scipy.org/), [NumPy](https://numpy.org/), and [Pandas](https://pandas.pydata.org/).
