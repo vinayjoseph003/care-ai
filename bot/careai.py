@@ -49,6 +49,7 @@ from enum import Enum
 
 from core.llm_router import LLMRouter
 from core.doctor_finder import find_nearby_doctors
+from core.red_flags import check_red_flags
 from core import (
     VectorStore, SymptomScorer,
     LANG_DETECT_PROMPT, FOLLOWUP_PROMPT, REASONING_PROMPT,
@@ -391,7 +392,7 @@ class CareAI:
     # ── EMERGENCY ─────────────────────────────────────────────
 
     def _is_emergency(self, msg):
-        return any(kw in msg.lower() for kw in EMERGENCY_KEYWORDS)
+        return check_red_flags(msg)["emergency"]
 
     def _emergency_msg(self):
         return (
