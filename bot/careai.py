@@ -43,11 +43,11 @@
 #  - reset() print is Windows cp1252 safe
 # ================================================================
 
-import json, re, sys, time
+import copy, json, re, sys, time
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 
-from core.llm_router import LLMRouter
+from core.llm_router import LLMRouter, AllProvidersFailedError, StreamInterruptedError
 from core.doctor_finder import find_nearby_doctors
 from core.red_flags import check_red_flags
 from core import (
@@ -81,6 +81,23 @@ EMERGENCY_KEYWORDS = [
     "seizure", "severe bleeding", "poisoning", "overdose",
     "throat swelling", "anaphylaxis", "not breathing",
 ]
+
+_SHARED_RESOURCES = {"router", "model", "vs", "scorer", "precaution_map"}
+
+SAFE_UNAVAILABLE_MESSAGE = (
+    "I apologize, but I cannot assess your symptoms right now because our clinical "
+    "assessment services are temporarily unavailable.\n\n"
+    "EMERGENCY GUIDANCE:\n"
+    "If you are experiencing any of the following emergency symptoms, please call 112 "
+    "(or your local emergency number) immediately or go to the nearest emergency room:\n"
+    "  - Chest pain\n"
+    "  - Trouble breathing\n"
+    "  - Severe bleeding\n"
+    "  - Fainting\n"
+    "  - Seizure\n"
+    "  - Thoughts of self-harm\n\n"
+    "Otherwise, please try again later or see a doctor."
+)
 
 MENTAL_HEALTH_CONDITIONS = {
     "depression", "anxiety", "stress", "panic", "ptsd", "bipolar",
@@ -299,6 +316,8 @@ class CareAI:
                 full_text.append(token)
                 sys.stdout.write(token)
                 sys.stdout.flush()
+        except (AllProvidersFailedError, StreamInterruptedError):
+            raise
         except KeyboardInterrupt:
             print("\n  [streaming interrupted]")
         except Exception as e:
@@ -332,18 +351,12 @@ class CareAI:
                 {"role": "user",   "content": user_content},
             ]
             return self.router.complete(messages, temp=temp, max_tokens=max_tok)
+        except (AllProvidersFailedError, StreamInterruptedError):
+            raise
         except Exception as e:
             err = str(e)
-            # Surface a friendly message if ALL providers are exhausted
-            # Note: matches the new router error string (no emoji prefix)
             if "All LLM providers failed" in err:
-                raise RuntimeError(
-                    "All API providers are currently rate-limited or unavailable.\n"
-                    "Options:\n"
-                    "  - Wait a few minutes and retry\n"
-                    "  - Add more API keys to .env\n"
-                    "  - Run 'ollama serve' for unlimited local fallback"
-                ) from e
+                raise AllProvidersFailedError(err) from e
             raise
 
     def _llm_conv(self, system, temp=0.3, max_tok=1500):
@@ -1387,6 +1400,26 @@ class CareAI:
             self._add_turn("assistant", msg)
             return {"type": "emergency", "message": msg}
 
+        snapshot = {
+            k: copy.deepcopy(v)
+            for k, v in vars(self).items()
+            if k not in _SHARED_RESOURCES
+        }
+
+        try:
+            return self._chat_pipeline(user_message)
+        except (AllProvidersFailedError, StreamInterruptedError):
+            current_keys = set(vars(self).keys())
+            for k, v in snapshot.items():
+                setattr(self, k, v)
+            for k in current_keys - set(snapshot.keys()) - _SHARED_RESOURCES:
+                delattr(self, k)
+            return {
+                "type":    "service_unavailable",
+                "message": SAFE_UNAVAILABLE_MESSAGE,
+            }
+
+    def _chat_pipeline(self, user_message: str) -> dict:
         # ── Resolved / better check ───────────────────────────
         if (
             self.state == ConvState.ANSWERED

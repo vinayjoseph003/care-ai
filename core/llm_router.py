@@ -27,6 +27,18 @@ import math
 from typing import Generator
 
 
+
+# ── Custom Exceptions ────────────────────────────────────────────
+class AllProvidersFailedError(RuntimeError):
+    """Raised when all configured LLM providers fail to produce a response."""
+    pass
+
+
+class StreamInterruptedError(RuntimeError):
+    """Raised when an active stream fails mid-stream after tokens were already yielded."""
+    pass
+
+
 # ── Logging — always stderr, never stdout ────────────────────────
 def _log(msg: str):
     print(msg, file=sys.stderr, flush=True)
@@ -691,7 +703,7 @@ class LLMRouter:
                 continue
 
         _log(f"[LLMRouter] ALL providers failed: {' | '.join(errors)}")
-        raise RuntimeError(
+        raise AllProvidersFailedError(
             f"All LLM providers failed.\n{' | '.join(errors)}\n\n"
             "Check your API keys in .env and ensure at least one provider is available."
         )
@@ -726,7 +738,12 @@ class LLMRouter:
                         _log(f"[LLMRouter] stream: switched to {provider}")
                         self._sticky = provider
                     yield first_token
-                    yield from gen
+                    try:
+                        for token in gen:
+                            yield token
+                    except Exception as e:
+                        _log(f"[LLMRouter] stream: {provider} failed mid-stream: {e}")
+                        raise StreamInterruptedError(f"Stream from {provider} interrupted: {e}") from e
                     return
 
                 elif provider == "gemini" and self.cfg.get("gemini_api_key"):
@@ -739,7 +756,12 @@ class LLMRouter:
                         _log(f"[LLMRouter] stream: switched to {provider}")
                         self._sticky = provider
                     yield first_token
-                    yield from gen
+                    try:
+                        for token in gen:
+                            yield token
+                    except Exception as e:
+                        _log(f"[LLMRouter] stream: {provider} failed mid-stream: {e}")
+                        raise StreamInterruptedError(f"Stream from {provider} interrupted: {e}") from e
                     return
 
                 elif provider == "groq" and self.cfg.get("groq_api_key") and self._groq_available:
@@ -752,7 +774,12 @@ class LLMRouter:
                         _log(f"[LLMRouter] stream: switched to {provider}")
                         self._sticky = provider
                     yield first_token
-                    yield from gen
+                    try:
+                        for token in gen:
+                            yield token
+                    except Exception as e:
+                        _log(f"[LLMRouter] stream: {provider} failed mid-stream: {e}")
+                        raise StreamInterruptedError(f"Stream from {provider} interrupted: {e}") from e
                     return
 
                 elif provider == "ollama" and self._status["ollama"]:
@@ -765,9 +792,16 @@ class LLMRouter:
                         _log(f"[LLMRouter] stream: switched to {provider}")
                         self._sticky = provider
                     yield first_token
-                    yield from gen
+                    try:
+                        for token in gen:
+                            yield token
+                    except Exception as e:
+                        _log(f"[LLMRouter] stream: {provider} failed mid-stream: {e}")
+                        raise StreamInterruptedError(f"Stream from {provider} interrupted: {e}") from e
                     return
 
+            except StreamInterruptedError:
+                raise
             except Exception as e:
                 err = str(e)
                 errors.append(f"{provider}: {err[:150]}")
@@ -779,9 +813,9 @@ class LLMRouter:
                 continue
 
         _log(f"[LLMRouter] stream: ALL providers failed: {' | '.join(errors)}")
-        yield (
-            "\n[ERROR] All LLM providers are currently unavailable. "
-            "Please check your API keys and try again."
+        raise AllProvidersFailedError(
+            f"All LLM providers failed.\n{' | '.join(errors)}\n\n"
+            "Check your API keys in .env and ensure at least one provider is available."
         )
 
     @property
