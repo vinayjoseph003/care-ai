@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from core.knowledge_base import build_all_chunks
 from bot import CareAI
+from bot.careai import SAFE_UNAVAILABLE_MESSAGE
 from ui.doctor_finder_panel import render_doctor_finder
 
 load_dotenv()
@@ -1521,14 +1522,28 @@ def main():
                 t.join()
                 result = result_holder[0] if result_holder else {}
 
+            if result.get("type") == "service_unavailable":
+                msg_text = result.get("message", SAFE_UNAVAILABLE_MESSAGE)
+                stream_placeholder.markdown(
+                    f'<div class="bot-msg-wrap">'
+                    f'<div class="bot-avatar">🏥</div>'
+                    f'<div class="bot-bubble">{sanitize_html(msg_text)}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                st.session_state.messages.append({
+                    "role":    "assistant",
+                    "content": msg_text,
+                    "triage":  None,
+                    "result":  result,
+                })
+                return
+
             if result.get("type") == "error":
                 err_msg = result.get("message", "Technical error")
                 err_tb  = result.get("traceback", "")
                 sys.stderr.write(f"[Care-AI Hosted Log] Error: {err_msg}\n{err_tb}\n")
-                clean_err_msg = (
-                    "Care-AI encountered an issue communicating with its clinical providers. "
-                    "Please wait a moment and try again."
-                )
+                clean_err_msg = SAFE_UNAVAILABLE_MESSAGE
                 st.error(clean_err_msg)
                 st.session_state.messages.append({
                     "role":    "assistant",
