@@ -385,17 +385,29 @@ def render_doctor_finder(bot, response: dict):
 
     # ── IDLE — show Find button ──────────────────────────────────
     if current == "idle":
+        consent = st.checkbox(
+            "I agree to send my location to the OpenStreetMap Overpass service (overpass-api.de) to find nearby facilities.",
+            value=False,
+            key="df_consent",
+        )
         col1, col2 = st.columns([2, 3])
         with col1:
             if st.button("📍 Find Doctors Near Me",
-                         key="df_find_btn", use_container_width=True):
-                st.session_state[STATE] = "locating"
-                st.rerun()
+                         key="df_find_btn", use_container_width=True, disabled=not consent):
+                if consent:
+                    st.session_state["df_consent_ok"] = True
+                    st.session_state[STATE] = "locating"
+                    st.rerun()
         with col2:
-            st.caption("Uses your device location · No data stored")
+            st.caption(
+                "Location is used only for this search, held in session memory, and sent to overpass-api.de."
+            )
 
     # ── LOCATING — request geolocation via streamlit-js-eval ────
     elif current == "locating":
+        if not st.session_state.get("df_consent_ok"):
+            st.session_state[STATE] = "idle"
+            st.rerun()
         st.markdown(
             '<div class="df-info">📍 Allow location access in the browser popup…</div>',
             unsafe_allow_html=True
@@ -486,7 +498,7 @@ def render_doctor_finder(bot, response: dict):
         )
 
         if st.button("🔄 Search Again", key="df_reset_btn"):
-            for k in (STATE, RESULTS, "df_lat", "df_lon", "df_geo_error"):
+            for k in (STATE, RESULTS, "df_lat", "df_lon", "df_geo_error", "df_consent_ok"):
                 st.session_state.pop(k, None)
             st.rerun()
 
