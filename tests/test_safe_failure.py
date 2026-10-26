@@ -91,6 +91,30 @@ class TestSafeFailure(unittest.TestCase):
         with self.assertRaises(StreamInterruptedError):
             self.bot._stream([{"role": "user", "content": "hi"}])
 
+    def test_fallback_opening_question_raises_on_outage(self):
+        """_fallback_opening_question raises AllProvidersFailedError instead of returning default string."""
+        self.mock_router.complete.side_effect = AllProvidersFailedError("All LLM providers failed.")
+        with self.assertRaises(AllProvidersFailedError):
+            self.bot._fallback_opening_question()
+
+    def test_fallback_opening_question_returns_default_on_non_outage_error(self):
+        """_fallback_opening_question returns default question on non-outage errors (e.g. ValueError)."""
+        self.mock_router.complete.side_effect = ValueError("x")
+        result = self.bot._fallback_opening_question()
+        self.assertIn("I'd like to understand this better", result)
+
+    def test_classify_query_raises_on_outage(self):
+        """_classify_query raises AllProvidersFailedError instead of returning 'SYMPTOM'."""
+        self.mock_router.complete.side_effect = AllProvidersFailedError("All LLM providers failed.")
+        with self.assertRaises(AllProvidersFailedError):
+            self.bot._classify_query()
+
+    def test_classify_query_returns_default_on_non_outage_error(self):
+        """_classify_query returns 'SYMPTOM' on non-outage errors (e.g. ValueError)."""
+        self.mock_router.complete.side_effect = ValueError("x")
+        result = self.bot._classify_query()
+        self.assertEqual(result, "SYMPTOM")
+
     def test_no_error_prefix_in_output(self):
         """Ensure no '[ERROR]' text appears in any output or message."""
         self.mock_router.complete.side_effect = AllProvidersFailedError("All LLM providers failed.")

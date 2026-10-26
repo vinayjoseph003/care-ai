@@ -678,6 +678,8 @@ class CareAI:
                 "You are a caring medical intake assistant.",
                 prompt, temp=0.3, max_tok=80,
             )
+        except (AllProvidersFailedError, StreamInterruptedError):
+            raise
         except Exception:
             return (
                 "I'd like to understand this better — "
@@ -721,6 +723,8 @@ class CareAI:
             valid = {"SYMPTOM","MEDICATION","CONDITION","WELLNESS",
                      "MENTAL_HEALTH","EMERGENCY","UNKNOWN"}
             return raw if raw in valid else "SYMPTOM"
+        except (AllProvidersFailedError, StreamInterruptedError):
+            raise
         except Exception:
             return "SYMPTOM"
 
