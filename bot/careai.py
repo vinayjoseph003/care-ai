@@ -1701,9 +1701,12 @@ class CareAI:
         self.router.reset_providers()
         print("[Session reset]\n")
 
+    def export_log_json(self) -> str:
+        return json.dumps(self.xai_logs, indent=2, ensure_ascii=False, default=str)
+
     def export_log(self, path="logs/session_log.json"):
         import os
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w') as f:
-            json.dump(self.xai_logs, f, indent=2)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(self.export_log_json())
         print(f"Log exported -> {path}")
