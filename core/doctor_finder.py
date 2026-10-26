@@ -132,7 +132,6 @@ MAX_RESULTS     = 8        # cap displayed results
 # Overpass API endpoints — tried in order if one fails
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
-    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
 
 
