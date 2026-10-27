@@ -219,6 +219,7 @@ class CareAI:
         self.last_specialist    = None
         self.last_differential  = []
         self.last_top_condition = ""
+        self.last_diff_dropped_count = 0
         self.followup_asked     = False
         self.memory_window      = 6
         self.session_summary    = ""
@@ -956,9 +957,11 @@ class CareAI:
         """
         Remove differentials whose supporting_symptoms have zero overlap
         with symptoms actually mentioned by the user.
-        Always keeps at least 1 differential (rank 1) even if no overlap.
+        Never drop the original index-0 differential (rank 1);
+        the overlap filter applies only to index >= 1.
         """
         if not differentials:
+            self.last_diff_dropped_count = 0
             return differentials
 
         all_user_text = " ".join(
@@ -968,8 +971,9 @@ class CareAI:
             str(v).lower() for v in self.collected_info.values() if v
         )
 
-        filtered = []
-        for dx in differentials:
+        filtered = [differentials[0]]
+        dropped = 0
+        for dx in differentials[1:]:
             supporting = [str(s).lower() for s in dx.get("supporting_symptoms", [])]
             if not supporting:
                 filtered.append(dx)
@@ -978,13 +982,15 @@ class CareAI:
             if overlap:
                 filtered.append(dx)
             else:
+                dropped += 1
                 print(f"  Dropped zero-overlap differential: {dx.get('condition')}")
 
-        return filtered if filtered else differentials[:1]
+        self.last_diff_dropped_count = dropped
+        return filtered
 
     # ── PASS 6: ANSWER GENERATION (streamed) ──────────────────
 
-    def _answer_streamed(self, context_str, reasoning, severity_result):
+    def _answer_streamed(self, context_str, reasoning, severity_result, top_condition: str = None):
         sev_note = ""
         if severity_result:
             sev_note = (
@@ -995,7 +1001,8 @@ class CareAI:
             )
         triage = reasoning.get('triage_level', 'SEE_DOCTOR')
         spec   = reasoning.get('specialist', 'General Practitioner')
-        diff   = reasoning.get('differential_diagnosis', [])
+        diff   = self.last_differential if self.last_differential else reasoning.get('differential_diagnosis', [])
+        top_cond = top_condition or self.last_top_condition or (diff[0]['condition'] if diff else 'Unknown')
 
         base_system = (
             f"{ANSWER_PROMPT}\n\n"
@@ -1006,7 +1013,7 @@ class CareAI:
             f"## CLINICAL REASONING:\n{json.dumps(reasoning, indent=2)}\n\n"
             f"TRIAGE LEVEL: {triage}\n"
             f"RECOMMENDED SPECIALIST: {spec}\n"
-            f"TOP DIFFERENTIAL: {diff[0]['condition'] if diff else 'Unknown'}\n\n"
+            f"TOP DIFFERENTIAL: {top_cond}\n\n"
             f"WORD LIMIT: Your response must be 80-120 words maximum.\n"
             f"Use [1],[2],[3] citations after every factual claim."
         )
@@ -1142,8 +1149,8 @@ class CareAI:
         last_user = next(
             (m['content'] for m in reversed(self.history) if m['role'] == 'user'), ""
         )
-        diff = reasoning.get('differential_diagnosis', [])
-        top  = diff[0]['condition'] if diff else 'unknown'
+        diff = self.last_differential if self.last_differential else reasoning.get('differential_diagnosis', [])
+        top  = self.last_top_condition or (diff[0]['condition'] if diff else 'unknown')
 
         supporting   = diff[0].get('supporting_symptoms', []) if diff else []
         key_evidence = diff[0].get('key_evidence', '') if diff else ''
@@ -1613,7 +1620,9 @@ class CareAI:
             self.last_specialist,
         )
 
-        answer = self._answer_streamed(context_str, reasoning, sev_result)
+        answer = self._answer_streamed(
+            context_str, reasoning, sev_result, top_condition=self.last_top_condition
+        )
 
         print("  Claim-level fact-checking...", end=" ", flush=True)
         fc = self._factcheck(answer, context_str)
@@ -1661,6 +1670,7 @@ class CareAI:
             "retrieved_sources":   sources,
             "severity":            sev_result,
             "differential":        diff_display,
+            "diff_filter_dropped": getattr(self, "last_diff_dropped_count", 0),
             "triage":              self.last_triage,
             "triage_floor_reason": floor_reason,
             "specialist":          self.last_specialist,
