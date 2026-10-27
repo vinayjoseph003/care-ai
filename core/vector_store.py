@@ -366,21 +366,25 @@ class VectorStore:
         return results
 
     def search_by_symptoms(self, symptoms: list, k: int = 6,
-                           query_category: str = None) -> list:
+                           query_category: str = None,
+                           full_query: str = None) -> list:
         """
         Symptom-overlap + TF-IDF hybrid search with source locking.
         Passes query_category through to search() for routing.
+        full_query: optional full conversation query text used for blocklist override checks.
         """
         # Guard: if symptoms list is genuinely empty, fall back to plain TF-IDF
         # using the full conversation text passed in (empty join would return nothing)
         if not symptoms:
-            return self.search("general symptom assessment", k=k,
+            fallback_query = full_query or "general symptom assessment"
+            return self.search(fallback_query, k=k,
                                query_category=query_category or "SYMPTOM")
 
-        sym_set     = {s.lower().strip() for s in symptoms}
-        query       = " ".join(symptoms)
-        query_lower = query.lower()
-        allowed_set = self.QUERY_CATEGORY_ROUTES.get(
+        sym_set        = {s.lower().strip() for s in symptoms}
+        query          = " ".join(symptoms)
+        query_lower    = query.lower()
+        override_query = full_query.lower() if full_query is not None else query_lower
+        allowed_set    = self.QUERY_CATEGORY_ROUTES.get(
             query_category or "SYMPTOM"  # default SYMPTOM for symptom searches
         )
 
@@ -393,7 +397,7 @@ class VectorStore:
         scored = []
         for doc in self.documents:
             # Blocklist + route filter applied before scoring
-            if not self._filter_doc(doc, query_lower, allowed_set):
+            if not self._filter_doc(doc, override_query, allowed_set):
                 continue
 
             doc_syms = {s.lower().strip() for s in doc.get('symptoms', [])}

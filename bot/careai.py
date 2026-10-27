@@ -753,13 +753,35 @@ class CareAI:
                 if val and str(val).strip() not in ('', '...', 'null', 'None'):
                     parts.append(str(val))
 
-        query     = " ".join(parts)
-        extracted = self.scorer.extract_symptoms_from_text(query)
+        query        = " ".join(parts)
+        text_results = self.vs.search(query, k=k, query_category=query_category)
+        extracted    = self.scorer.extract_symptoms_from_text(query)
         if extracted:
-            return self.vs.search_by_symptoms(
-                extracted, k=k, query_category=query_category
+            sym_results = self.vs.search_by_symptoms(
+                extracted, k=k, query_category=query_category, full_query=query
             )
-        return self.vs.search(query, k=k, query_category=query_category)
+            seen_ids = set()
+            merged = []
+            max_len = max(len(sym_results), len(text_results))
+            for i in range(max_len):
+                if i < len(sym_results):
+                    doc = sym_results[i]
+                    doc_id = doc.get('id') or doc.get('text', '')[:40]
+                    if doc_id not in seen_ids:
+                        seen_ids.add(doc_id)
+                        merged.append(doc)
+                        if len(merged) == k:
+                            break
+                if i < len(text_results):
+                    doc = text_results[i]
+                    doc_id = doc.get('id') or doc.get('text', '')[:40]
+                    if doc_id not in seen_ids:
+                        seen_ids.add(doc_id)
+                        merged.append(doc)
+                        if len(merged) == k:
+                            break
+            return merged
+        return text_results[:k]
 
     def _fmt_context(self, chunks):
         if not chunks:
