@@ -870,6 +870,7 @@ class CareAI:
                 f"{self.CONSISTENCY_THRESHOLD}% threshold — single pass sufficient)."
             )
             result_a['uncertainty_zones'] = uncertainty
+            result_a['conditions_agree']  = True
             print(f"\n  Self-consistency skipped (confidence={confidence_a}%)")
             return result_a
 
@@ -945,6 +946,7 @@ class CareAI:
 
         result_a['uncertainty_zones'] = uncertainty
         result_a['confidence_score']  = confidence
+        result_a['conditions_agree']  = conditions_agree
         return result_a
 
     # ── ZERO-OVERLAP DIFFERENTIAL FILTER ─────────────────────────
@@ -1573,6 +1575,24 @@ class CareAI:
         self.last_top_condition = diff[0]['condition'] if diff else ""
         print("done")
 
+        from core.triage_floor import apply_triage_floor
+
+        conditions_agree = reasoning.get('conditions_agree')
+        if conditions_agree is None:
+            conditions_agree = not any(
+                "disagreed on top condition" in str(u).lower()
+                for u in reasoning.get("uncertainty_zones", [])
+            )
+
+        self.last_triage, floor_reason = apply_triage_floor(
+            triage=self.last_triage,
+            differential=self.last_differential,
+            top_condition=self.last_top_condition,
+            confidence=reasoning.get('confidence_score'),
+            severity_level=sev_result.get('severity_level') if sev_result else None,
+            conditions_agree=conditions_agree,
+        )
+
         print("  Generating treatment guidance and red flags...", end=" ", flush=True)
         if self.last_triage == "SELF_CARE":
             guidance_func = lambda: self._get_selfcare_guidance(self.last_top_condition)
@@ -1634,21 +1654,22 @@ class CareAI:
         ]
 
         self.xai_logs.append({
-            "turn":              len(self.xai_logs) + 1,
-            "user_message":      user_message,
-            "language":          self.user_language,
-            "socrates_data":     self.collected_info,
-            "retrieved_sources": sources,
-            "severity":          sev_result,
-            "differential":      diff_display,
-            "triage":            self.last_triage,
-            "specialist":        self.last_specialist,
-            "reasoning":         reasoning,
-            "factcheck":         fc,
-            "treatment":         treatment,
-            "red_flags":         red_flags,
-            "final_answer":      final,
-            "xai_explanation":   xai,
+            "turn":                len(self.xai_logs) + 1,
+            "user_message":        user_message,
+            "language":            self.user_language,
+            "socrates_data":       self.collected_info,
+            "retrieved_sources":   sources,
+            "severity":            sev_result,
+            "differential":        diff_display,
+            "triage":              self.last_triage,
+            "triage_floor_reason": floor_reason,
+            "specialist":          self.last_specialist,
+            "reasoning":           reasoning,
+            "factcheck":           fc,
+            "treatment":           treatment,
+            "red_flags":           red_flags,
+            "final_answer":        final,
+            "xai_explanation":     xai,
         })
 
         return {
