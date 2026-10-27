@@ -1061,9 +1061,14 @@ def render_sidebar(bot):
                     del st.session_state[k]
             st.rerun()
 
-        if st.button("📤  Export Log", use_container_width=True):
-            bot.export_log()
-            st.success("Log saved → logs/session_log.json")
+        st.download_button(
+            label="📤  Export Log",
+            data=bot.export_log_json(),
+            file_name="care_ai_session.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+        st.caption("Downloads to your device only. Nothing is saved on the server.")
 
         # ── Disclaimer ────────────────────────────────────────
         st.markdown("""
