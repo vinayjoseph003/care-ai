@@ -132,6 +132,15 @@ class TestLowConfidenceMode(unittest.TestCase):
         self.assertEqual(rf_topic, "sore throat with difficulty swallowing")
         self.assertNotEqual(rf_topic, "Typhoid")
 
+        # _xai_explain_streamed must receive low_confidence=True
+        self.bot._xai_explain_streamed.assert_called_once()
+        xai_kwargs = self.bot._xai_explain_streamed.call_args.kwargs
+        xai_args = self.bot._xai_explain_streamed.call_args.args
+        xai_low_conf = xai_kwargs.get("low_confidence") or (
+            xai_args[2] if len(xai_args) > 2 else False
+        )
+        self.assertTrue(xai_low_conf, "_xai_explain_streamed must receive low_confidence=True")
+
         # 4. xai_logs entry has "low_confidence_reason" (code only, no symptom text)
         last_log = self.bot.xai_logs[-1]
         reason_code = last_log.get("low_confidence_reason")
@@ -185,6 +194,14 @@ class TestLowConfidenceMode(unittest.TestCase):
         self.bot._get_red_flags.assert_called_once()
         self.assertEqual(self.bot._get_red_flags.call_args[0][0], "Common Cold")
 
+        self.bot._xai_explain_streamed.assert_called_once()
+        xai_kwargs = self.bot._xai_explain_streamed.call_args.kwargs
+        xai_args = self.bot._xai_explain_streamed.call_args.args
+        xai_low_conf = xai_kwargs.get("low_confidence", False) or (
+            xai_args[2] if len(xai_args) > 2 else False
+        )
+        self.assertFalse(xai_low_conf, "_xai_explain_streamed must receive low_confidence=False")
+
     def test_confidence_coercion_string_percent(self):
         """
         STEP 1 (c):
@@ -223,6 +240,140 @@ class TestLowConfidenceMode(unittest.TestCase):
 
         result = self.bot.chat(user_message)
         self.assertFalse(result.get("low_confidence"), "String '85%' must coerce to 85 and not trigger low_confidence")
+
+    def test_answer_streamed_prompt_low_confidence(self):
+        """
+        STEP 1 (a):
+        low_confidence=True: the system prompt built in _answer_streamed does not
+        contain the top condition name on the TOP DIFFERENTIAL line
+        (it says "UNCERTAIN - do not name a diagnosis").
+        """
+        self.bot._stream_answer = MagicMock(return_value="safe next steps")
+        reasoning = {
+            "triage_level": "SEE_DOCTOR",
+            "specialist": "General Practitioner",
+            "differential_diagnosis": [
+                {
+                    "rank": 1,
+                    "condition": "Typhoid",
+                    "probability": "LOW",
+                    "supporting_symptoms": ["discomfort upon waking"],
+                }
+            ],
+        }
+
+        self.bot._answer_streamed(
+            context_str="Context text",
+            reasoning=reasoning,
+            severity_result=None,
+            top_condition="Typhoid",
+            low_confidence=True,
+        )
+
+        self.bot._stream_answer.assert_called_once()
+        messages = self.bot._stream_answer.call_args[0][0]
+        system_prompt = messages[0]["content"]
+
+        top_diff_lines = [
+            line.strip() for line in system_prompt.splitlines()
+            if line.startswith("TOP DIFFERENTIAL:")
+        ]
+        self.assertEqual(len(top_diff_lines), 1, "Must contain exactly one TOP DIFFERENTIAL line")
+        self.assertEqual(
+            top_diff_lines[0],
+            "TOP DIFFERENTIAL: UNCERTAIN - do not name a diagnosis",
+        )
+        self.assertNotIn("Typhoid", top_diff_lines[0])
+
+    def test_xai_explain_streamed_prompt_low_confidence(self):
+        """
+        STEP 1 (b):
+        low_confidence=True: the prompt built in _xai_explain_streamed tells the model
+        to explain in terms of the user's symptoms and the uncertainty, and does not
+        present any condition as the likely cause.
+        """
+        self.bot.history = [{"role": "user", "content": "i have a sore throat"}]
+        self.bot.last_top_condition = "Typhoid"
+        self.bot._stream_xai = MagicMock(return_value="explanation")
+        self.bot._xai_explain_streamed = CareAI._xai_explain_streamed.__get__(self.bot, CareAI)
+
+        reasoning = {
+            "differential_diagnosis": [
+                {
+                    "rank": 1,
+                    "condition": "Typhoid",
+                    "probability": "LOW",
+                    "supporting_symptoms": ["discomfort upon waking"],
+                    "key_evidence": "discomfort upon waking",
+                }
+            ],
+            "uncertainty_zones": ["symptom overlap with viral illness"],
+            "triage_level": "SEE_DOCTOR",
+            "triage_reason": "Persistent symptoms",
+            "knowledge_sources": ["MedQuAD"],
+        }
+        factcheck = {"verdict": "VERIFIED"}
+
+        self.bot._xai_explain_streamed(reasoning, factcheck, low_confidence=True)
+
+        self.bot._stream_xai.assert_called_once()
+        messages = self.bot._stream_xai.call_args[0][0]
+        user_prompt = messages[1]["content"]
+
+        self.assertNotIn("Top condition identified", user_prompt)
+        self.assertNotIn("Top condition identified: Typhoid", user_prompt)
+        self.assertIn("explain in terms of the user's symptoms and the uncertainty", user_prompt.lower())
+        self.assertIn("do not present any condition as the likely cause", user_prompt.lower())
+
+    def test_prompts_unchanged_when_high_confidence(self):
+        """
+        STEP 1 (c):
+        low_confidence=False: both prompts are unchanged from current behavior.
+        """
+        self.bot.history = [{"role": "user", "content": "i have a cold"}]
+        self.bot.last_top_condition = "Common Cold"
+        self.bot._stream_answer = MagicMock(return_value="answer")
+        self.bot._stream_xai = MagicMock(return_value="explanation")
+        self.bot._xai_explain_streamed = CareAI._xai_explain_streamed.__get__(self.bot, CareAI)
+
+        reasoning = {
+            "triage_level": "SEE_DOCTOR",
+            "specialist": "General Practitioner",
+            "differential_diagnosis": [
+                {
+                    "rank": 1,
+                    "condition": "Common Cold",
+                    "probability": "HIGH",
+                    "supporting_symptoms": ["runny nose"],
+                    "key_evidence": "runny nose",
+                }
+            ],
+            "uncertainty_zones": ["none"],
+            "triage_reason": "Viral cold symptoms",
+            "knowledge_sources": ["MedQuAD"],
+        }
+        factcheck = {"verdict": "VERIFIED"}
+
+        # Check _answer_streamed prompt with low_confidence=False
+        self.bot._answer_streamed(
+            context_str="Context text",
+            reasoning=reasoning,
+            severity_result=None,
+            top_condition="Common Cold",
+            low_confidence=False,
+        )
+        ans_messages = self.bot._stream_answer.call_args[0][0]
+        ans_system = ans_messages[0]["content"]
+        self.assertIn("TOP DIFFERENTIAL: Common Cold", ans_system)
+        self.assertNotIn("TOP DIFFERENTIAL: UNCERTAIN", ans_system)
+
+        # Check _xai_explain_streamed prompt with low_confidence=False
+        self.bot._xai_explain_streamed(reasoning, factcheck, low_confidence=False)
+        xai_messages = self.bot._stream_xai.call_args[0][0]
+        xai_user = xai_messages[1]["content"]
+        self.assertIn("Top condition identified: Common Cold", xai_user)
+        self.assertIn("Key symptom pointing to this: runny nose", xai_user)
+        self.assertNotIn("Assessment status: UNCERTAIN", xai_user)
 
 
 if __name__ == "__main__":

@@ -1032,6 +1032,7 @@ class CareAI:
         spec   = reasoning.get('specialist', 'General Practitioner')
         diff   = self.last_differential if self.last_differential else reasoning.get('differential_diagnosis', [])
         top_cond = top_condition or self.last_top_condition or (diff[0]['condition'] if diff else 'Unknown')
+        top_diff = "UNCERTAIN - do not name a diagnosis" if low_confidence else top_cond
 
         low_conf_note = ""
         if low_confidence:
@@ -1053,7 +1054,7 @@ class CareAI:
             f"## CLINICAL REASONING:\n{json.dumps(reasoning, indent=2)}\n\n"
             f"TRIAGE LEVEL: {triage}\n"
             f"RECOMMENDED SPECIALIST: {spec}\n"
-            f"TOP DIFFERENTIAL: {top_cond}\n\n"
+            f"TOP DIFFERENTIAL: {top_diff}\n\n"
             f"WORD LIMIT: Your response must be 80-120 words maximum.\n"
             f"Use [1],[2],[3] citations after every factual claim."
             f"{low_conf_note}"
@@ -1186,7 +1187,7 @@ class CareAI:
     # ── PASS 8: XAI EXPLANATION (streamed) ────────────────────
     # [P1-C] Rewritten: cause -> reasoning -> recommendation format
 
-    def _xai_explain_streamed(self, reasoning, factcheck):
+    def _xai_explain_streamed(self, reasoning, factcheck, low_confidence: bool = False):
         last_user = next(
             (m['content'] for m in reversed(self.history) if m['role'] == 'user'), ""
         )
@@ -1200,14 +1201,24 @@ class CareAI:
         triage_reason = reasoning.get('triage_reason', '')
         sources      = reasoning.get('knowledge_sources', [])
 
+        if low_confidence:
+            condition_block = (
+                "Assessment status: UNCERTAIN - do not present any condition as the likely cause.\n"
+                "Explain in terms of the user's symptoms and the uncertainty.\n"
+            )
+        else:
+            condition_block = (
+                f"Top condition identified: {top}\n"
+                f"Key symptom pointing to this: {key_evidence}\n"
+            )
+
         # [FIX v2.1] All .join() calls coerce elements to str() to prevent
         # TypeError when the LLM returns integers in list fields
         # (e.g. confidence: 85 leaking into supporting_symptoms).
         prompt = (
             f"User's message: {last_user}\n"
             f"User's language: {self.user_language['language']}\n\n"
-            f"Top condition identified: {top}\n"
-            f"Key symptom pointing to this: {key_evidence}\n"
+            f"{condition_block}"
             f"Supporting symptoms: {', '.join(str(s) for s in supporting)}\n"
             f"What sources were used: {', '.join(str(s) for s in sources)}\n"
             f"What the AI is uncertain about: {', '.join(str(u) for u in uncertainty)}\n"
@@ -1712,7 +1723,7 @@ class CareAI:
         if final != answer:
             print("  Auto-corrected based on fact-check.")
 
-        xai = self._xai_explain_streamed(reasoning, fc)
+        xai = self._xai_explain_streamed(reasoning, fc, low_confidence=low_confidence)
 
         mental_health_msg = ""
         if self._needs_mental_health_checkin(self.last_top_condition, self.last_triage):
