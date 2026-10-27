@@ -1203,6 +1203,11 @@ def render_result_panels(result: dict, bot=None):
     if not result or result.get("type") not in ("answer",):
         return
 
+    if result.get("low_confidence"):
+        st.warning(
+            "Low-confidence assessment: the possible conditions below are for discussion with a doctor, not a diagnosis."
+        )
+
     render_differential(result.get("differential", []))
 
     treatment = result.get("treatment")

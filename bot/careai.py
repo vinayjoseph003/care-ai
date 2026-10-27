@@ -1012,7 +1012,14 @@ class CareAI:
 
     # ── PASS 6: ANSWER GENERATION (streamed) ──────────────────
 
-    def _answer_streamed(self, context_str, reasoning, severity_result, top_condition: str = None):
+    def _answer_streamed(
+        self,
+        context_str,
+        reasoning,
+        severity_result,
+        top_condition: str = None,
+        low_confidence: bool = False,
+    ):
         sev_note = ""
         if severity_result:
             sev_note = (
@@ -1026,6 +1033,17 @@ class CareAI:
         diff   = self.last_differential if self.last_differential else reasoning.get('differential_diagnosis', [])
         top_cond = top_condition or self.last_top_condition or (diff[0]['condition'] if diff else 'Unknown')
 
+        low_conf_note = ""
+        if low_confidence:
+            low_conf_note = (
+                "\n\n## LOW-CONFIDENCE INSTRUCTIONS:\n"
+                "- Do not state a most-likely diagnosis.\n"
+                "- State clearly that you are not sure.\n"
+                "- Mention at most 2 possibilities only if supported by the retrieved context.\n"
+                "- Give the safest next step and when to seek in-person medical care.\n"
+                "- Keep the existing word limit and citation rule."
+            )
+
         base_system = (
             f"{ANSWER_PROMPT}\n\n"
             f"User's language: {self.user_language['language']} "
@@ -1038,6 +1056,7 @@ class CareAI:
             f"TOP DIFFERENTIAL: {top_cond}\n\n"
             f"WORD LIMIT: Your response must be 80-120 words maximum.\n"
             f"Use [1],[2],[3] citations after every factual claim."
+            f"{low_conf_note}"
         )
         messages = self._build_messages(self._wrap_prompt(base_system))
         return self._stream_answer(messages)
@@ -1604,7 +1623,7 @@ class CareAI:
         self.last_top_condition = diff[0]['condition'] if diff else ""
         print("done")
 
-        from core.triage_floor import apply_triage_floor
+        from core.triage_floor import apply_triage_floor, _coerce_confidence
 
         conditions_agree = reasoning.get('conditions_agree')
         if conditions_agree is None:
@@ -1622,15 +1641,41 @@ class CareAI:
             conditions_agree=conditions_agree,
         )
 
+        # Compute low_confidence once after the triage floor.
+        conf_num = _coerce_confidence(reasoning.get('confidence_score'))
+        low_confidence = False
+        low_confidence_reason = None
+
+        if conf_num is None:
+            low_confidence = True
+            low_confidence_reason = "MISSING_CONFIDENCE"
+        elif conf_num < 50:
+            low_confidence = True
+            low_confidence_reason = "LOW_CONFIDENCE"
+        elif conditions_agree is False:
+            low_confidence = True
+            low_confidence_reason = "CONDITIONS_DISAGREE"
+
+        # Treatment guidance and red flags: when low_confidence, pass user's symptom topic
+        # (collected_info["symptom_or_topic"], fallback to first user message) instead of last_top_condition.
+        if low_confidence:
+            guidance_topic = (
+                self.collected_info.get("symptom_or_topic")
+                or next((m["content"] for m in self.history if m["role"] == "user"), "")
+                or self.last_top_condition
+            )
+        else:
+            guidance_topic = self.last_top_condition
+
         print("  Generating treatment guidance and red flags...", end=" ", flush=True)
         if self.last_triage == "SELF_CARE":
-            guidance_func = lambda: self._get_selfcare_guidance(self.last_top_condition)
+            guidance_func = lambda: self._get_selfcare_guidance(guidance_topic)
         else:
-            guidance_func = lambda: self._get_treatment_guidance(self.last_top_condition, self.last_triage)
+            guidance_func = lambda: self._get_treatment_guidance(guidance_topic, self.last_triage)
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             fut_treatment = executor.submit(guidance_func)
-            fut_red_flags = executor.submit(self._get_red_flags, self.last_top_condition)
+            fut_red_flags = executor.submit(self._get_red_flags, guidance_topic)
             treatment = fut_treatment.result()
             red_flags = fut_red_flags.result()
         print("done")
@@ -1643,7 +1688,11 @@ class CareAI:
         )
 
         answer = self._answer_streamed(
-            context_str, reasoning, sev_result, top_condition=self.last_top_condition
+            context_str,
+            reasoning,
+            sev_result,
+            top_condition=self.last_top_condition,
+            low_confidence=low_confidence,
         )
 
         print("  Claim-level fact-checking...", end=" ", flush=True)
@@ -1685,42 +1734,46 @@ class CareAI:
         ]
 
         self.xai_logs.append({
-            "turn":                len(self.xai_logs) + 1,
-            "user_message":        user_message,
-            "language":            self.user_language,
-            "socrates_data":       self.collected_info,
-            "retrieved_sources":   sources,
-            "severity":            sev_result,
-            "differential":        diff_display,
-            "diff_filter_dropped": getattr(self, "last_diff_dropped_count", 0),
-            "triage":              self.last_triage,
-            "triage_floor_reason": floor_reason,
-            "specialist":          self.last_specialist,
-            "reasoning":           reasoning,
-            "factcheck":           fc,
-            "treatment":           treatment,
-            "red_flags":           red_flags,
-            "final_answer":        final,
-            "xai_explanation":     xai,
+            "turn":                  len(self.xai_logs) + 1,
+            "user_message":          user_message,
+            "language":              self.user_language,
+            "socrates_data":         self.collected_info,
+            "retrieved_sources":     sources,
+            "severity":              sev_result,
+            "differential":          diff_display,
+            "diff_filter_dropped":   getattr(self, "last_diff_dropped_count", 0),
+            "triage":                self.last_triage,
+            "triage_floor_reason":   floor_reason,
+            "low_confidence":        low_confidence,
+            "low_confidence_reason": low_confidence_reason,
+            "specialist":            self.last_specialist,
+            "reasoning":             reasoning,
+            "factcheck":             fc,
+            "treatment":             treatment,
+            "red_flags":             red_flags,
+            "final_answer":          final,
+            "xai_explanation":       xai,
         })
 
         return {
-            "type":               "answer",
-            "message":            final,
-            "xai_explanation":    xai,
-            "sources":            sources,
-            "confidence":         reasoning.get('confidence_score', 0),
-            "hallucination_risk": fc.get('hallucination_risk', 'N/A'),
-            "fact_check":         fc.get('verdict', 'N/A'),
-            "language":           self.user_language['language'],
-            "severity":           sev_result.get('severity_level', 'N/A'),
-            "triage":             self.last_triage,
-            "specialist":         self.last_specialist,
-            "differential":       diff_display,
-            "treatment":          treatment,
-            "red_flags":          red_flags,
-            "mental_health_msg":  mental_health_msg,
-            "nearby_doctors":     None,
+            "type":                  "answer",
+            "message":               final,
+            "xai_explanation":       xai,
+            "sources":               sources,
+            "confidence":            reasoning.get('confidence_score', 0),
+            "low_confidence":        low_confidence,
+            "low_confidence_reason": low_confidence_reason,
+            "hallucination_risk":    fc.get('hallucination_risk', 'N/A'),
+            "fact_check":            fc.get('verdict', 'N/A'),
+            "language":              self.user_language['language'],
+            "severity":              sev_result.get('severity_level', 'N/A'),
+            "triage":                self.last_triage,
+            "specialist":            self.last_specialist,
+            "differential":          diff_display,
+            "treatment":             treatment,
+            "red_flags":             red_flags,
+            "mental_health_msg":     mental_health_msg,
+            "nearby_doctors":        None,
         }
 
     # ── DOCTOR FINDER ─────────────────────────────────────────
