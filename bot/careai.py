@@ -213,6 +213,7 @@ class CareAI:
         self.followup_count     = 0
         # [P2-A] No hard cap — confidence threshold drives stopping
         self.user_language      = {"language": "English", "code": "en"}
+        self.english_summary    = ""
         self.xai_logs           = []
         self.severity_result    = {}
         self.last_triage        = None
@@ -450,6 +451,23 @@ class CareAI:
         raw = self._llm(LANG_DETECT_PROMPT, msg, temp=0.0, max_tok=60)
         return self._parse_json(raw, {"language": "English", "code": "en"})
 
+    def _is_bridge_active(self, text: str = "") -> bool:
+        """
+        Return True if non-English bridge should be used:
+        user_language code != 'en', or user text contains non-ASCII letters.
+        """
+        code = (self.user_language or {}).get("code", "en")
+        if code != "en":
+            return True
+        if text and any(c.isalpha() and not c.isascii() for c in text):
+            return True
+        for m in self.history:
+            if m.get("role") == "user":
+                content = str(m.get("content", ""))
+                if any(c.isalpha() and not c.isascii() for c in content):
+                    return True
+        return False
+
     # ── PASS 2: SOCRATES FOLLOW-UP ENGINE ─────────────────────
     # [P2-A] Confidence-threshold based stopping
     # [P2-B] Relevance gate — only asks relevant SOCRATES dims
@@ -578,6 +596,7 @@ class CareAI:
             return {
                 "has_enough_info":       True,
                 "diagnostic_confidence": 50,
+                "english_summary":       getattr(self, "english_summary", ""),
                 "collected_info":        {},
                 "followup_question":     None,
                 "followup_reason":       "User unable to provide more information",
@@ -589,6 +608,7 @@ class CareAI:
             return {
                 "has_enough_info":       True,
                 "diagnostic_confidence": 60,
+                "english_summary":       getattr(self, "english_summary", ""),
                 "collected_info":        {},
                 "followup_question":     None,
                 "followup_reason":       "Maximum follow-ups reached",
@@ -638,11 +658,18 @@ class CareAI:
         result = self._parse_json(raw, {
             "has_enough_info":       True,
             "diagnostic_confidence": 50,
+            "english_summary":       "",
             "collected_info":        {},
             "followup_question":     None,
             "followup_reason":       "",
             "no_new_info_count":     0,
         })
+
+        es = result.get("english_summary")
+        if es and str(es).strip() not in ('', '...', 'null', 'None'):
+            es_str = str(es).strip()
+            if "Short 1-2 sentence" not in es_str:
+                self.english_summary = es_str[:300]
 
         confidence = result.get("diagnostic_confidence", 50)
         if confidence >= 65:
@@ -742,7 +769,13 @@ class CareAI:
             for v in collected_fields
         )
 
-        if not has_collected:
+        bridge_active = self._is_bridge_active()
+        if bridge_active and getattr(self, "english_summary", None):
+            parts = [self.english_summary]
+            for val in collected_fields:
+                if val and str(val).strip() not in ('', '...', 'null', 'None'):
+                    parts.append(str(val))
+        elif not has_collected:
             parts = [
                 m['content'] for m in self.history[-2:]
                 if m['role'] == 'user'
@@ -815,10 +848,13 @@ class CareAI:
     # ── PASS 4: SYMPTOM SEVERITY SCORING ──────────────────────
 
     def _score_severity(self):
-        all_text = " ".join(str(m['content']) for m in self.history if m['role'] == 'user')
-        all_text += " " + " ".join(
-            str(v) for v in self.collected_info.values() if v
-        )
+        bridge_active = self._is_bridge_active()
+        raw_user_text = " ".join(str(m['content']) for m in self.history if m['role'] == 'user')
+        collected_text = " ".join(str(v) for v in self.collected_info.values() if v)
+        if bridge_active and getattr(self, "english_summary", None):
+            all_text = f"{self.english_summary} {raw_user_text} {collected_text}".strip()
+        else:
+            all_text = f"{raw_user_text} {collected_text}".strip()
         symptoms = self.scorer.extract_symptoms_from_text(all_text)
         return self.scorer.score(symptoms) if symptoms else {}
 
@@ -992,6 +1028,8 @@ class CareAI:
         all_user_text += " " + " ".join(
             str(v).lower() for v in self.collected_info.values() if v
         )
+        if getattr(self, "english_summary", None):
+            all_user_text += " " + self.english_summary.lower()
 
         filtered = [differentials[0]]
         dropped = 0
@@ -1501,6 +1539,7 @@ class CareAI:
         # ── If already RESOLVED, treat any new message as a fresh complaint ──
         if self.state == ConvState.RESOLVED:
             self.collected_info           = {}
+            self.english_summary          = ""
             self.followup_count           = 0
             self.no_new_info_count        = 0
             self.followup_asked           = True
@@ -1515,6 +1554,7 @@ class CareAI:
 
             if relation == "unrelated":
                 self.collected_info             = {}
+                self.english_summary            = ""
                 self.followup_count             = 0
                 self.no_new_info_count          = 0
                 self.followup_asked             = True
@@ -1748,6 +1788,7 @@ class CareAI:
             "turn":                  len(self.xai_logs) + 1,
             "user_message":          user_message,
             "language":              self.user_language,
+            "english_summary":       self.english_summary,
             "socrates_data":         self.collected_info,
             "retrieved_sources":     sources,
             "severity":              sev_result,
