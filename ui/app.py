@@ -9,6 +9,7 @@ import sys
 import queue
 import html
 import threading
+import base64
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -80,11 +81,34 @@ def reliability_badge(risk: str | None, verdict: str | None, low_confidence: boo
 #  PAGE CONFIG
 # ════════════════════════════════════════════════════════════════════════════
 
+_ASSETS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "images"))
+_LOGO_LIGHT_PATH = os.path.join(_ASSETS_DIR, "logo-light.png")
+_LOGO_MARK_PATH = os.path.join(_ASSETS_DIR, "logo-mark_light.png")
+
+
+def _load_asset_b64(path: str) -> str:
+    try:
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                return base64.b64encode(f.read()).decode("utf-8")
+    except Exception:
+        pass
+    return ""
+
+
+_LOGO_LIGHT_B64 = _load_asset_b64(_LOGO_LIGHT_PATH) or _load_asset_b64("assets/images/logo-light.png")
+_LOGO_MARK_B64 = _load_asset_b64(_LOGO_MARK_PATH) or _load_asset_b64("assets/images/logo-mark_light.png")
+
 st.set_page_config(
     page_title="Care-AI · Medical Assistant",
-    page_icon="🏥",
+    page_icon="assets/images/logo-mark_light.png",
     layout="wide",
     initial_sidebar_state="auto",
+)
+
+st.logo(
+    "assets/images/logo-light.png",
+    icon_image="assets/images/logo-mark_light.png",
 )
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -93,19 +117,25 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,300&display=swap');
-
 /* ── Design tokens ───────────────────────────────────────── */
 :root {
-  --bg:          #F0F4F8;
+  --navy:        #061A3A;
+  --text:        #061A3A;
+  --text-muted:  #243B5A;
+  --text-dim:    #4A5D6E;
+  --bg:          #F2F8F8;
   --surface:     #FFFFFF;
-  --surface2:    #F7FAFC;
-  --surface3:    #EDF2F7;
-  --border:      #CBD5E0;
-  --border-hi:   #A0AEC0;
-  --text:        #1A202C;
-  --text-muted:  #4A5568;
-  --text-dim:    #718096;
+  --surface2:    #E7EFEF;
+  --surface3:    #DCEBEB;
+  --border:      #CFDFDF;
+  --border-hi:   #A8C5C5;
+  --teal:        #10D4B8;
+  --teal-dark:   #06695C;
+  --teal-deep:   #04544A;
+  --teal-dim:    rgba(16, 212, 184, 0.12);
+  --cyan:        #1BC8D8;
+  --blue:        #0EA5C9;
+  --soft-green:  #7FE0B8;
   --green:       #16A34A;
   --green-dim:   #DCFCE7;
   --yellow:      #D97706;
@@ -114,14 +144,12 @@ st.markdown("""
   --red-dim:     #FEE2E2;
   --orange:      #EA580C;
   --orange-dim:  #FFEDD5;
-  --blue:        #2563EB;
-  --blue-dim:    #DBEAFE;
-  --teal:        #0891B2;
-  --teal-dim:    #CFFAFE;
-  --accent:      #2563EB;
-  --accent-dim:  #DBEAFE;
-  --mono:        'IBM Plex Mono', 'Courier New', monospace;
-  --serif:       'Source Serif 4', Georgia, serif;
+  --accent:      #06695C;
+  --accent-dim:  rgba(6, 105, 92, 0.12);
+  --font-sans:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans Devanagari", "Noto Sans Telugu", "Noto Sans Tamil", sans-serif;
+  --font-mono:   ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --mono:        var(--font-mono);
+  --serif:       var(--font-sans);
   --radius-sm:   6px;
   --radius-md:   10px;
   --radius-lg:   14px;
@@ -131,7 +159,11 @@ st.markdown("""
 html, body, [class*="css"] {
   background-color: var(--bg) !important;
   color: var(--text) !important;
-  font-family: var(--serif) !important;
+  font-family: var(--font-sans) !important;
+}
+
+.stApp, [data-testid="stAppViewContainer"] {
+  background-color: var(--bg) !important;
 }
 
 /* ── Hide Streamlit chrome ───────────────────────────────── */
@@ -146,7 +178,7 @@ html, body, [class*="css"] {
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: #CBD5E0;
+  background: var(--border);
   border-radius: 3px;
 }
 
@@ -154,7 +186,7 @@ html, body, [class*="css"] {
    SIDEBAR
 ══════════════════════════════════════════════════════════ */
 [data-testid="stSidebar"] {
-  background: var(--surface) !important;
+  background-color: var(--bg) !important;
   border-right: 1px solid var(--border) !important;
   min-width: 248px !important;
   max-width: 300px !important;
@@ -162,40 +194,31 @@ html, body, [class*="css"] {
 [data-testid="stSidebar"] * { color: var(--text) !important; }
 [data-testid="stSidebar"] > div:first-child {
   overflow-y: auto !important;
-  padding: 1.1rem 1rem !important;
+  padding: 56px 1rem 1.1rem !important;
+  background-color: var(--bg) !important;
+}
+[data-testid="stSidebarHeader"] {
+  background-color: var(--bg) !important;
+  padding-bottom: 0.5rem !important;
+}
+[data-testid="stLogo"] {
+  background-color: transparent !important;
 }
 
 /* Sidebar brand lockup */
 .sb-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0.2rem 0 1.2rem;
+  justify-content: flex-start;
+  padding: 0.2rem 0 1rem;
   margin-bottom: 1rem;
   border-bottom: 1px solid var(--border);
 }
-.sb-brand-icon {
-  width: 36px; height: 36px;
-  background: linear-gradient(135deg, var(--teal-dim), var(--accent-dim));
-  border: 1px solid rgba(8,145,178,0.2);
-  border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px;
-  flex-shrink: 0;
-}
-.sb-brand-name {
-  font-family: var(--mono);
-  font-size: 0.9rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  color: var(--teal) !important;
-  line-height: 1.1;
-}
-.sb-brand-ver {
-  font-family: var(--mono);
-  font-size: 0.6rem;
-  color: var(--text-muted) !important;
-  letter-spacing: 0.08em;
+.sb-brand-logo {
+  width: 180px;
+  max-width: 100%;
+  height: auto;
+  display: block;
 }
 
 /* Language badge — topmost prominent element */
@@ -218,7 +241,7 @@ html, body, [class*="css"] {
   font-size: 0.58rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--teal) !important;
+  color: var(--teal-dark) !important;
   margin-bottom: 0.15rem;
 }
 .sb-lang-value {
@@ -251,7 +274,7 @@ html, body, [class*="css"] {
   font-weight: 600;
   color: var(--text) !important;
 }
-.sv-teal   { color: var(--teal)   !important; }
+.sv-teal   { color: var(--teal-dark)   !important; }
 .sv-green  { color: var(--green)  !important; }
 .sv-yellow { color: var(--yellow) !important; }
 .sv-orange { color: var(--orange) !important; }
@@ -371,13 +394,23 @@ html, body, [class*="css"] {
 }
 .main-header-left {}
 .main-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-family: var(--mono);
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: 0.1em;
-  color: var(--teal) !important;
+  color: var(--navy) !important;
   line-height: 1.1;
   margin: 0;
+}
+.main-title-mark {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  display: inline-block;
+  vertical-align: middle;
 }
 .main-subtitle {
   font-family: var(--serif);
@@ -871,21 +904,40 @@ html, body, [class*="css"] {
 [data-testid="stExpandSidebarButton"],
 [data-testid="stSidebarCollapseButton"] {
   visibility: visible !important;
+  position: fixed !important;
+  top: 12px !important;
+  left: 12px !important;
+  z-index: 1000001 !important;
+  width: 36px !important;
+  height: 36px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   background: var(--surface) !important;
   border: 1px solid var(--border) !important;
   border-radius: var(--radius-sm) !important;
-  color: var(--text) !important;
+  color: #061A3A !important;
+  box-shadow: 0 1px 3px rgba(6, 26, 58, 0.08) !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
 }
 [data-testid="stExpandSidebarButton"]:hover,
 [data-testid="stSidebarCollapseButton"]:hover {
-  background: var(--surface3) !important;
+  background: var(--surface2) !important;
   border-color: var(--border-hi) !important;
-  color: var(--teal) !important;
+}
+[data-testid="stExpandSidebarButton"]:focus-visible,
+[data-testid="stSidebarCollapseButton"]:focus-visible {
+  outline: 2px solid var(--teal) !important;
+  outline-offset: 2px !important;
 }
 [data-testid="stExpandSidebarButton"] svg,
 [data-testid="stSidebarCollapseButton"] svg {
-  fill: var(--text) !important;
-  stroke: var(--text) !important;
+  fill: #061A3A !important;
+  stroke: #061A3A !important;
+  color: #061A3A !important;
+  width: 18px !important;
+  height: 18px !important;
 }
 
 /* Sidebar expand/collapse arrow button (inside sidebar) */
@@ -899,13 +951,13 @@ section[data-testid="stSidebar"] button[aria-label="Open sidebar"] {
 }
 section[data-testid="stSidebar"] button[aria-label="Close sidebar"] svg,
 section[data-testid="stSidebar"] button[aria-label="Open sidebar"] svg {
-  fill: var(--text) !important;
-  stroke: var(--text) !important;
+  fill: #061A3A !important;
+  stroke: #061A3A !important;
 }
 
 /* Ensure sidebar never has a dark overlay */
 section[data-testid="stSidebar"] {
-  background: var(--surface) !important;
+  background: var(--bg) !important;
 }
 section[data-testid="stSidebar"]::before {
   display: none !important;
@@ -925,6 +977,9 @@ section[data-testid="stSidebar"]::before {
   [data-testid="stExpandSidebarButton"],
   [data-testid="stSidebarCollapseButton"] {
     min-height: 44px !important;
+    min-width: 44px !important;
+    width: 44px !important;
+    height: 44px !important;
   }
   [data-testid="stSidebar"] {
     max-width: 85vw !important;
@@ -1021,13 +1076,9 @@ def _risk_badge_class(risk: str) -> str:
 def render_sidebar(bot):
     with st.sidebar:
         # Brand
-        st.markdown("""
+        st.markdown(f"""
 <div class="sb-brand">
-  <div class="sb-brand-icon">🏥</div>
-  <div>
-    <div class="sb-brand-name">CARE-AI</div>
-    <div class="sb-brand-ver">v2.0 · MULTILINGUAL XAI</div>
-  </div>
+  <img src="data:image/png;base64,{_LOGO_LIGHT_B64}" class="sb-brand-logo" alt="Care-AI logo" width="180">
 </div>""", unsafe_allow_html=True)
 
         # ── Detected language — topmost prominent badge ───────
@@ -1478,10 +1529,13 @@ def main():
     # ── Header ────────────────────────────────────────────────
     col_title, col_btn = st.columns([6, 1])
     with col_title:
-        st.markdown("""
+        st.markdown(f"""
 <div class="main-header">
   <div class="main-header-left">
-    <div class="main-title">🏥 CARE-AI</div>
+    <div class="main-title">
+      <img src="data:image/png;base64,{_LOGO_MARK_B64}" class="main-title-mark" alt="Care-AI logo" width="32" height="32">
+      <span>CARE-AI</span>
+    </div>
     <div class="main-subtitle">
       Multilingual · XAI · Hallucination-Controlled Medical Assistant
     </div>

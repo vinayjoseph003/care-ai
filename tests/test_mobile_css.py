@@ -87,6 +87,46 @@ class TestMobileCSS(unittest.TestCase):
         """(f) a sidebar notice string exists: 'Refreshing the page clears your chat (privacy).'"""
         self.assertIn("Refreshing the page clears your chat (privacy).", self.app_content)
 
+    def test_g_sidebar_toggle_pinned_and_styled(self):
+        """(g) Both expand and collapse sidebar buttons are pinned fixed at top: 12px, left: 12px, 36px size with icon color #061A3A."""
+        pattern_pinned = (
+            r'\[data-testid="stExpandSidebarButton"\],\s*'
+            r'\[data-testid="stSidebarCollapseButton"\]\s*\{'
+            r'[^}]*position\s*:\s*fixed\s*!important;'
+            r'[^}]*top\s*:\s*12px\s*!important;'
+            r'[^}]*left\s*:\s*12px\s*!important;'
+        )
+        self.assertTrue(
+            re.search(pattern_pinned, self.app_content, re.DOTALL),
+            "Expected both stExpandSidebarButton and stSidebarCollapseButton to be pinned with position: fixed, top: 12px, left: 12px."
+        )
+        pattern_size = (
+            r'\[data-testid="stExpandSidebarButton"\],\s*'
+            r'\[data-testid="stSidebarCollapseButton"\]\s*\{'
+            r'[^}]*width\s*:\s*36px\s*!important;'
+            r'[^}]*height\s*:\s*36px\s*!important;'
+        )
+        self.assertTrue(
+            re.search(pattern_size, self.app_content, re.DOTALL),
+            "Expected 36px width and height for toggle buttons."
+        )
+        pattern_icon = (
+            r'\[data-testid="stExpandSidebarButton"\]\s*svg,\s*'
+            r'\[data-testid="stSidebarCollapseButton"\]\s*svg\s*\{'
+            r'[^}]*#061A3A'
+        )
+        self.assertTrue(
+            re.search(pattern_icon, self.app_content, re.DOTALL),
+            "Expected toggle button svgs to have explicit #061A3A color."
+        )
+
+    def test_h_sidebar_brand_logo_referenced_and_exists(self):
+        """(h) ui/app.py references assets/images/logo-light.png with alt 'Care-AI logo' and file exists."""
+        self.assertIn("assets/images/logo-light.png", self.app_content)
+        self.assertIn('alt="Care-AI logo"', self.app_content)
+        logo_path = os.path.join(PROJECT_ROOT, "assets", "images", "logo-light.png")
+        self.assertTrue(os.path.isfile(logo_path), f"Logo file does not exist at {logo_path}")
+
 
 if __name__ == "__main__":
     unittest.main()
