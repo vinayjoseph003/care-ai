@@ -151,3 +151,21 @@ def _risk_badge_class(risk: str) -> str:
     if r == "MEDIUM": return "badge-medium"
     return "badge-high"
 
+
+def format_specialist_heading(specialist: str | None) -> str:
+    """
+    Format specialist name/label for display in doctor finder heading and cards:
+    - Strips any stray trailing 's' after parentheses (e.g. '(GP)s' -> '(GP)').
+    - Keeps medical acronyms such as GP and ENT uppercase.
+    - Handles None and empty strings safely, returning an empty string.
+    """
+    if not specialist:
+        return ""
+    text = str(specialist).strip()
+    # Strip stray trailing 's' after closing parenthesis (e.g. '(GP)s' -> '(GP)')
+    text = re.sub(r'\)\s*s\b', ')', text, flags=re.IGNORECASE)
+    # Ensure acronyms stay uppercase (GP, ENT)
+    for acronym in ("GP", "ENT", "ER", "ICU", "OB/GYN"):
+        text = re.sub(rf'\b{re.escape(acronym)}\b', acronym, text, flags=re.IGNORECASE)
+    return text
+

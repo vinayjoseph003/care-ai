@@ -1635,13 +1635,12 @@ def main():
   <div class="empty-state-icon">🩺</div>
   <div class="empty-state-title">Describe your symptoms to begin</div>
   <div style="font-family:var(--serif);font-size:0.84rem;color:var(--text-muted)">
-    Ask in any language — Hindi, Telugu, Tamil, or English
+    Ask in any language — Hindi, Telugu, or English
   </div>
   <div class="empty-state-langs">
     <span class="lang-chip">English</span>
     <span class="lang-chip">हिन्दी</span>
     <span class="lang-chip">తెలుగు</span>
-    <span class="lang-chip">தமிழ்</span>
     <span class="lang-chip">Code-mix</span>
   </div>
 </div>""", unsafe_allow_html=True)
