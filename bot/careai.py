@@ -1696,6 +1696,7 @@ class CareAI:
         conf_num = _coerce_confidence(reasoning.get('confidence_score'))
         low_confidence = False
         low_confidence_reason = None
+        cov = (reasoning.get("context_coverage") or "").strip().upper()
 
         if conf_num is None:
             low_confidence = True
@@ -1706,6 +1707,9 @@ class CareAI:
         elif conditions_agree is False:
             low_confidence = True
             low_confidence_reason = "CONDITIONS_DISAGREE"
+        elif cov == "NONE" or (cov == "PARTIAL" and not sev_result):
+            low_confidence = True
+            low_confidence_reason = "WEAK_CONTEXT"
 
         # Treatment guidance and red flags: when low_confidence, pass user's symptom topic
         # (collected_info["symptom_or_topic"], fallback to first user message) instead of last_top_condition.
