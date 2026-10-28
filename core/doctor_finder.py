@@ -12,10 +12,17 @@
 # ================================================================
 
 import math
+import re
 import urllib.request
 import urllib.parse
+import urllib.error
 import json
 import time
+
+
+class OverpassUnavailable(Exception):
+    """Raised when the Overpass API is unavailable, times out, or returns non-success responses."""
+    pass
 
 # ── Specialist → OSM tag mapping ──────────────────────────────
 # Maps Care-AI's specialist labels to the most relevant OSM
@@ -122,6 +129,31 @@ SPECIALIST_OSM_MAP = {
                                   ("amenity", "hospital")],
 }
 
+SPECIALIST_ALIASES = {
+    "gp": "General Practitioner",
+}
+
+DEFAULT_FALLBACK_TAGS = [
+    ("amenity", "doctors"),
+    ("amenity", "clinic"),
+    ("amenity", "hospital"),
+]
+
+
+def _resolve_specialist_tags(specialist: str) -> list[tuple[str, str]]:
+    """
+    Map a specialist string to OSM tags.
+    Splits on '/', ',', '(', tries each token case-insensitively against
+    SPECIALIST_OSM_MAP and aliases. Falls back to doctors + clinic + hospital.
+    """
+    map_lower = {k.lower(): v for k, v in SPECIALIST_OSM_MAP.items()}
+    tokens = [tok.strip() for tok in re.split(r'[/,\(]', specialist) if tok.strip()]
+    for tok in tokens:
+        canonical = SPECIALIST_ALIASES.get(tok.lower(), tok)
+        if canonical.lower() in map_lower:
+            return map_lower[canonical.lower()]
+    return list(DEFAULT_FALLBACK_TAGS)
+
 # Radius in metres to search. Starts at PRIMARY_RADIUS,
 # expands to FALLBACK_RADIUS if < MIN_RESULTS found.
 PRIMARY_RADIUS  = 5_000    # 5 km
@@ -162,20 +194,37 @@ def _build_query(lat: float, lon: float, radius: int, osm_key: str, osm_val: str
 
 
 def _query_overpass(query: str) -> list:
-    """POST query to Overpass API, return list of OSM elements or []."""
+    """POST query to Overpass API, return list of OSM elements or raise OverpassUnavailable."""
+    headers = {
+        "User-Agent": "CareAI-student-project/1.0 (+https://github.com/vinayjoseph003/care-ai)",
+        "Accept": "application/json",
+    }
+    data = urllib.parse.urlencode({"data": query}).encode()
+
     for endpoint in OVERPASS_ENDPOINTS:
-        try:
-            data = urllib.parse.urlencode({"data": query}).encode()
-            req  = urllib.request.Request(
-                endpoint, data=data,
-                headers={"User-Agent": "CareAI-DoctorFinder/1.0"},
-            )
-            with urllib.request.urlopen(req, timeout=12) as resp:
-                result = json.loads(resp.read().decode())
-                return result.get("elements", [])
-        except Exception:
-            continue   # try next endpoint
-    return []
+        req = urllib.request.Request(endpoint, data=data, headers=headers)
+        max_retries = 2
+        delays = [2, 4]
+        for attempt in range(max_retries + 1):
+            try:
+                with urllib.request.urlopen(req, timeout=12) as resp:
+                    raw_text = resp.read().decode("utf-8")
+                    result = json.loads(raw_text)
+                    return result.get("elements", [])
+            except urllib.error.HTTPError as e:
+                if e.code in (406, 429):
+                    raise OverpassUnavailable(f"HTTP {e.code}: {e.reason}") from e
+                if e.code in (502, 503, 504):
+                    if attempt < max_retries:
+                        time.sleep(delays[attempt])
+                        continue
+                    else:
+                        raise OverpassUnavailable(f"HTTP {e.code}: {e.reason}") from e
+                raise OverpassUnavailable(f"HTTP {e.code}: {e.reason}") from e
+            except Exception as e:
+                raise OverpassUnavailable(f"Overpass request failed: {e}") from e
+
+    raise OverpassUnavailable("No Overpass endpoints available")
 
 
 # ── Element → clean dict ───────────────────────────────────────
@@ -274,45 +323,53 @@ def find_nearby_doctors(
     # Normalise specialist name — strip trailing details like "e.g. ..."
     specialist_clean = specialist.split("(")[0].strip().title()
 
-    # Look up OSM tag list; fall back to general hospital search
-    tag_pairs = SPECIALIST_OSM_MAP.get(
-        specialist_clean,
-        [("amenity", "hospital")],
-    )
+    # Look up OSM tag list with normalization and aliases
+    tag_pairs = _resolve_specialist_tags(specialist)
 
     all_results: list[dict] = []
     radius_used = PRIMARY_RADIUS
 
-    # Try primary radius, then expand if needed
-    for radius in (PRIMARY_RADIUS, FALLBACK_RADIUS):
-        radius_used = radius
-        raw_elements: list = []
+    try:
+        # Try primary radius, then expand if needed
+        for radius in (PRIMARY_RADIUS, FALLBACK_RADIUS):
+            radius_used = radius
+            raw_elements: list = []
 
-        for osm_key, osm_val in tag_pairs:
-            query    = _build_query(user_lat, user_lon, radius, osm_key, osm_val)
-            elements = _query_overpass(query)
-            raw_elements.extend(elements)
-            time.sleep(0.3)   # be polite to Overpass
+            for osm_key, osm_val in tag_pairs:
+                query    = _build_query(user_lat, user_lon, radius, osm_key, osm_val)
+                elements = _query_overpass(query)
+                raw_elements.extend(elements)
+                time.sleep(0.3)   # be polite to Overpass
 
-        # Deduplicate by OSM id
-        seen_ids = set()
-        for el in raw_elements:
-            osm_id = el.get("id")
-            if osm_id in seen_ids:
-                continue
-            seen_ids.add(osm_id)
-            parsed = _parse_element(el, user_lat, user_lon)
-            if parsed:
-                all_results.append(parsed)
+            # Deduplicate by OSM id
+            seen_ids = set()
+            for el in raw_elements:
+                osm_id = el.get("id")
+                if osm_id in seen_ids:
+                    continue
+                seen_ids.add(osm_id)
+                parsed = _parse_element(el, user_lat, user_lon)
+                if parsed:
+                    all_results.append(parsed)
 
-        if len(all_results) >= MIN_RESULTS:
-            break   # enough results — no need to expand radius
+            if len(all_results) >= MIN_RESULTS:
+                break   # enough results — no need to expand radius
+
+    except OverpassUnavailable:
+        return {
+            "specialist":     specialist_clean,
+            "results":        [],
+            "radius_used_km": radius_used // 1000,
+            "error_kind":     "service_unavailable",
+            "error":          "The map service is busy right now. Try again in a minute, or search on Google Maps/Practo",
+        }
 
     if not all_results:
         return {
             "specialist":     specialist_clean,
             "results":        [],
             "radius_used_km": radius_used // 1000,
+            "error_kind":     "no_results",
             "error": (
                 "No nearby facilities found. "
                 "Try searching on Google Maps or Practo for "
@@ -333,5 +390,6 @@ def find_nearby_doctors(
         "specialist":     specialist_clean,
         "results":        ranked,
         "radius_used_km": radius_used // 1000,
+        "error_kind":     None,
         "error":          None,
     }

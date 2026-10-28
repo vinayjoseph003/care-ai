@@ -468,10 +468,16 @@ def render_doctor_finder(bot, response: dict):
         radius_km = result.get("radius_used_km", 5)
 
         if error:
+            msg = (
+                "The map service is busy right now. Try again in a minute, or search on Google Maps/Practo"
+                if result.get("error_kind") == "service_unavailable"
+                else error
+            )
             st.markdown(
-                f'<div class="df-alert">ℹ️ {error}</div>',
+                f'<div class="df-alert">ℹ️ {msg}</div>',
                 unsafe_allow_html=True
             )
+            _manual_links(specialist)
         elif results:
             st.markdown(_render_cards(results), unsafe_allow_html=True)
             st.markdown(
