@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.knowledge_base import build_all_chunks
+from core.text_safety import normalize_emergency_numbers
 from bot import CareAI
 from bot.careai import SAFE_UNAVAILABLE_MESSAGE
 from ui.doctor_finder_panel import render_doctor_finder
@@ -1726,7 +1727,7 @@ def main():
                     streamed_text += token
                     stream_placeholder.markdown(
                         f'<div class="bot-msg-wrap">'
-                        f'<div class="bot-bubble">{sanitize_html(strip_rendered_emoji_prefix(streamed_text))}▌</div>'
+                        f'<div class="bot-bubble">{sanitize_html(strip_rendered_emoji_prefix(normalize_emergency_numbers(streamed_text)))}▌</div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
@@ -1764,7 +1765,7 @@ def main():
                 })
                 return
 
-            final_text = result.get("message", streamed_text)
+            final_text = normalize_emergency_numbers(result.get("message", streamed_text))
             triage     = result.get("triage")
             is_emergency = (triage == "EMERGENCY") or (result.get("type") == "emergency")
 
