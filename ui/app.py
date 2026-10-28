@@ -55,6 +55,27 @@ def sanitize_html(text: str, preserve_newlines: bool = True) -> str:
     return escaped
 
 
+def top_diagnosis_label(xai_logs: list | None, last_top: str | None) -> str:
+    """Return 'Not determined' if latest assessment was low_confidence, else last_top."""
+    is_low_conf = bool(xai_logs[-1].get("low_confidence")) if xai_logs else False
+    if is_low_conf:
+        return "Not determined"
+    return str(last_top).strip() if last_top else ""
+
+
+def reliability_badge(risk: str | None, verdict: str | None, low_confidence: bool = False) -> tuple[str, str, str]:
+    """Return (_icon, _label, _cls) for hallucination risk / verification status."""
+    _risk_up    = str(risk).upper()
+    _verdict_up = str(verdict).upper()
+    if _risk_up == "HIGH" or _verdict_up in ("UNVERIFIED", "FAILED"):
+        return ("⚠️", "Verify with doctor", "badge-high")
+    if low_confidence:
+        return ("🟡", "Confirm with doctor", "badge-medium")
+    if _risk_up == "LOW" and _verdict_up == "VERIFIED":
+        return ("✅", "Well-supported", "badge-low")
+    return ("🟡", "Confirm with doctor", "badge-medium")
+
+
 # ════════════════════════════════════════════════════════════════════════════
 #  PAGE CONFIG
 # ════════════════════════════════════════════════════════════════════════════
@@ -1001,7 +1022,8 @@ def render_sidebar(bot):
   <div class="sb-metric-value {cls}">{m['icon']} {m['label']}</div>
 </div>""", unsafe_allow_html=True)
 
-        top = sanitize_html(getattr(bot, 'last_top_condition', ''), preserve_newlines=False)
+        top_text = top_diagnosis_label(getattr(bot, 'xai_logs', None), getattr(bot, 'last_top_condition', ''))
+        top = sanitize_html(top_text, preserve_newlines=False)
         if top:
             st.markdown(f"""
 <div class="sb-metric">
@@ -1238,14 +1260,9 @@ def render_result_panels(result: dict, bot=None):
                     unsafe_allow_html=True)
 
     # ── Reliability badge ─────────────────────────────────────
-    _risk_up    = str(risk).upper()
-    _verdict_up = str(verdict).upper()
-    if _risk_up == "LOW" and _verdict_up == "VERIFIED":
-        _icon, _label, _cls = "✅", "Well-supported", "badge-low"
-    elif _risk_up == "HIGH" or _verdict_up in ("UNVERIFIED", "FAILED"):
-        _icon, _label, _cls = "⚠️", "Verify with doctor", "badge-high"
-    else:
-        _icon, _label, _cls = "🟡", "Confirm with doctor", "badge-medium"
+    _icon, _label, _cls = reliability_badge(
+        risk, verdict, low_confidence=bool(result.get("low_confidence"))
+    )
 
     st.markdown(
         f'<div class="badge-row"><span class="badge {_cls}">{_icon} {_label}</span></div>',
