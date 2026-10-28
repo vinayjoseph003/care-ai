@@ -234,6 +234,71 @@ class TestMobileCSS(unittest.TestCase):
         # Middle emoji must not be removed
         self.assertEqual(strip_rendered_emoji_prefix("Hello 🏥 world"), "Hello 🏥 world")
 
+    def test_v_urgency_style_helper(self):
+        """(v) urgency_style returns correct dict for all levels and safe fallback for unknown."""
+        from ui.helpers import urgency_style
+
+        # Supported levels
+        for level, expected_color in [
+            ("SELF_CARE", "#15803D"),
+            ("SEE_DOCTOR", "#92400E"),
+            ("URGENT_CARE", "#9A3412"),
+            ("EMERGENCY", "#991B1B"),
+        ]:
+            res = urgency_style(level)
+            self.assertIsInstance(res, dict)
+            self.assertIn("label", res)
+            self.assertIn("icon", res)
+            self.assertIn("color", res)
+            self.assertIn("bg", res)
+            self.assertEqual(res["color"], expected_color)
+
+        # Fallback for unknown / None
+        fb_none = urgency_style(None)
+        self.assertIsInstance(fb_none, dict)
+        self.assertIn("label", fb_none)
+        self.assertIn("color", fb_none)
+
+        fb_unk = urgency_style("UNKNOWN_LEVEL")
+        self.assertIsInstance(fb_unk, dict)
+        self.assertIn("label", fb_unk)
+        self.assertIn("color", fb_unk)
+
+    def test_w_badge_visible_helper(self):
+        """(w) badge_visible suppresses badge when low_confidence is True."""
+        from ui.helpers import badge_visible
+
+        # Always False when low_confidence=True
+        self.assertFalse(badge_visible(True, True))
+        self.assertFalse(badge_visible(True, False))
+        self.assertFalse(badge_visible(True, "VERIFIED"))
+        self.assertFalse(badge_visible(True, "FAILED"))
+
+        # When low_confidence=False, follows verified state
+        self.assertTrue(badge_visible(False, True))
+        self.assertTrue(badge_visible(False, "VERIFIED"))
+        self.assertFalse(badge_visible(False, False))
+        self.assertFalse(badge_visible(False, "FAILED"))
+
+    def test_x_emergency_banner_112_markup_and_css(self):
+        """(x) ui/app.py includes .emergency-banner-112 with prominent 112 callout."""
+        self.assertIn(".emergency-banner-112", self.app_content)
+        pattern = r'\.emergency-banner-112\s*\{[^}]*background[^}]*#(?:DC2626|B91C1C)'
+        self.assertTrue(
+            re.search(pattern, self.app_content, re.IGNORECASE),
+            "Expected .emergency-banner-112 to have high-contrast red background."
+        )
+        self.assertIn("emergency-banner-112", self.app_content)
+        self.assertIn("112", self.app_content)
+
+    def test_y_treatment_grid_responsive_1col(self):
+        """(y) .treatment-grid has 1-column layout at <= 768px."""
+        pattern = r'@media[^{]*max-width:\s*768px[^{]*\{.*?\.treatment-grid\s*\{[^}]*grid-template-columns\s*:\s*1fr'
+        self.assertTrue(
+            re.search(pattern, self.app_content, re.DOTALL),
+            "Expected .treatment-grid to collapse to 1fr at <= 768px."
+        )
+
 
 
 

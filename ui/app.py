@@ -48,42 +48,19 @@ def _get_setting(key: str, default: str = "") -> str:
     return default
 
 
-def strip_rendered_emoji_prefix(text: str) -> str:
-    """Strip leading hospital/doctor emoji from rendered text without altering stored messages."""
-    if not text:
-        return ""
-    return re.sub(r'^[🏥🩺\s]+', '', str(text))
-
-
-def sanitize_html(text: str, preserve_newlines: bool = True) -> str:
-    """Safely escape user and model text before inserting into HTML templates."""
-    if not text:
-        return ""
-    escaped = html.escape(str(text))
-    if preserve_newlines:
-        return escaped.replace("\n", "<br>")
-    return escaped
-
-
-def top_diagnosis_label(xai_logs: list | None, last_top: str | None) -> str:
-    """Return 'Not determined' if latest assessment was low_confidence, else last_top."""
-    is_low_conf = bool(xai_logs[-1].get("low_confidence")) if xai_logs else False
-    if is_low_conf:
-        return "Not determined"
-    return str(last_top).strip() if last_top else ""
-
-
-def reliability_badge(risk: str | None, verdict: str | None, low_confidence: bool = False) -> tuple[str, str, str]:
-    """Return (_icon, _label, _cls) for hallucination risk / verification status."""
-    _risk_up    = str(risk).upper()
-    _verdict_up = str(verdict).upper()
-    if _risk_up == "HIGH" or _verdict_up in ("UNVERIFIED", "FAILED"):
-        return ("⚠️", "Verify with doctor", "badge-high")
-    if low_confidence:
-        return ("🟡", "Confirm with doctor", "badge-medium")
-    if _risk_up == "LOW" and _verdict_up == "VERIFIED":
-        return ("✅", "Well-supported", "badge-low")
-    return ("🟡", "Confirm with doctor", "badge-medium")
+from ui.helpers import (
+    strip_rendered_emoji_prefix,
+    sanitize_html,
+    top_diagnosis_label,
+    reliability_badge,
+    badge_visible,
+    urgency_style,
+    _prob_to_pct,
+    _prob_css_class,
+    _prob_fill_color,
+    _prob_label_color,
+    _risk_badge_class,
+)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -167,6 +144,11 @@ html, body, [class*="css"] {
   background-color: var(--bg) !important;
   color: var(--text) !important;
   font-family: var(--font-sans) !important;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--teal) !important;
+  outline-offset: 2px !important;
 }
 
 .stApp, [data-testid="stAppViewContainer"] {
@@ -502,13 +484,12 @@ div[data-testid="stColumn"] .stButton button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-family: var(--mono);
-  font-size: 0.62rem;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   padding: 4px 12px;
-  border-radius: 4px;
+  border-radius: 6px;
   margin-bottom: 0.8rem;
 }
 .triage-SELF_CARE {
@@ -532,8 +513,76 @@ div[data-testid="stColumn"] .stButton button {
   border: 1px solid #DC2626;
   animation: triage-pulse 2s ease-in-out infinite;
 }
+.triage-DEFAULT {
+  background: #E7EFEF;
+  color: #061A3A;
+  border: 1px solid #CBD5E0;
+}
 @keyframes triage-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); }
+  50%       { box-shadow: 0 0 0 4px rgba(220,38,38,0.12); }
+}
+
+/* Emergency Full-Width Banner (.emergency-banner-112) */
+.emergency-banner-112 {
+  background: #DC2626 !important;
+  color: #FFFFFF !important;
+  border-radius: var(--radius-md);
+  padding: 1.25rem 1.5rem;
+  margin: 0.8rem 0 1.2rem;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.3);
+  border: 2px solid #B91C1C;
+  font-family: var(--font-sans);
+}
+.emergency-banner-lead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 0.6rem;
+  flex-wrap: wrap;
+}
+.emergency-banner-badge {
+  background: #FFFFFF;
+  color: #DC2626;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.emergency-banner-call {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+.emergency-banner-number {
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #FFFFFF;
+  letter-spacing: -0.02em;
+}
+.emergency-banner-text {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #FFFFFF;
+  opacity: 0.98;
+}
+
+/* Low-confidence notice (amber WCAG AA palette) */
+.low-confidence-box {
+  background: #FEF3C7;
+  color: #78350F;
+  border: 1px solid #F59E0B;
+  border-left: 4px solid #D97706;
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
   50%       { box-shadow: 0 0 0 4px rgba(220,38,38,0.12); }
 }
 
@@ -541,11 +590,11 @@ div[data-testid="stColumn"] .stButton button {
    RESULT PANELS — section label
 ══════════════════════════════════════════════════════════ */
 .panel-section-label {
-  font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-dim);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--navy);
   margin: 1.2rem 0 0.6rem;
   padding-bottom: 0.3rem;
   border-bottom: 1px solid var(--border);
@@ -575,10 +624,10 @@ div[data-testid="stColumn"] .stButton button {
 .diff-rank-badge {
   position: absolute;
   top: 10px; right: 10px;
-  font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.1em;
-  color: var(--text-dim);
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--navy);
   background: var(--surface3);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -613,10 +662,10 @@ div[data-testid="stColumn"] .stButton button {
   margin-bottom: 0.5rem;
 }
 .diff-prob-label {
-  font-family: var(--mono);
-  font-size: 0.65rem;
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.02em;
 }
 .diff-prob-bar {
   flex: 1;
@@ -637,8 +686,8 @@ div[data-testid="stColumn"] .stButton button {
   margin-top: 0.45rem;
 }
 .diff-evidence {
-  font-family: var(--mono);
-  font-size: 0.67rem;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
   color: #92400E;
   margin-top: 0.4rem;
   line-height: 1.4;
@@ -678,11 +727,11 @@ div[data-testid="stColumn"] .stButton button {
   flex-shrink: 0;
 }
 .tc-title {
-  font-family: var(--mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--navy);
 }
 .tc-list {
   margin: 0;
@@ -715,10 +764,10 @@ div[data-testid="stColumn"] .stButton button {
   padding: 0.9rem 1.1rem;
 }
 .redflag-title {
-  font-family: var(--mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   color: #DC2626;
   margin-bottom: 0.55rem;
   display: flex;
@@ -735,8 +784,9 @@ div[data-testid="stColumn"] .stButton button {
 }
 .redflag-threshold {
   margin-top: 0.55rem;
-  font-family: var(--mono);
+  font-family: var(--font-sans);
   font-size: 0.75rem;
+  font-weight: 600;
   color: #DC2626;
 }
 
@@ -782,12 +832,12 @@ div[data-testid="stColumn"] .stButton button {
   margin-top: 0.7rem;
 }
 .badge {
-  font-family: var(--mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
   padding: 3px 9px;
   border-radius: 4px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .badge-low    { background: #DCFCE7; color: #16A34A; border: 1px solid #16A34A; }
 .badge-medium { background: #FEF3C7; color: #D97706; border: 1px solid #D97706; }
@@ -801,14 +851,14 @@ div[data-testid="stColumn"] .stButton button {
   margin-top: 0.35rem;
 }
 .source-pill {
-  font-family: var(--mono);
-  font-size: 0.63rem;
-  background: #F7FAFC;
-  border: 1px solid #CBD5E0;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  background: #FFFFFF;
+  border: 1px solid var(--border);
   border-radius: 20px;
   padding: 2px 10px;
-  color: #4A5568;
-  letter-spacing: 0.04em;
+  color: var(--navy);
+  letter-spacing: 0.02em;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -821,10 +871,11 @@ div[data-testid="stColumn"] .stButton button {
   margin-top: 0.5rem !important;
 }
 [data-testid="stExpander"] summary {
-  font-family: var(--mono) !important;
-  font-size: 0.73rem !important;
-  letter-spacing: 0.08em !important;
-  color: var(--text-muted) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em !important;
+  color: var(--navy) !important;
   padding: 0.55rem 0.8rem !important;
 }
 [data-testid="stExpander"] summary:hover {
@@ -1070,62 +1121,16 @@ section[data-testid="stSidebar"]::before {
 # ════════════════════════════════════════════════════════════════════════════
 
 TRIAGE_META = {
-    "SELF_CARE":   {"icon": "●", "label": "SELF-CARE",    "css": "triage-SELF_CARE"},
-    "SEE_DOCTOR":  {"icon": "●", "label": "SEE A DOCTOR", "css": "triage-SEE_DOCTOR"},
-    "URGENT_CARE": {"icon": "●", "label": "URGENT CARE",  "css": "triage-URGENT_CARE"},
-    "EMERGENCY":   {"icon": "▲", "label": "EMERGENCY",    "css": "triage-EMERGENCY"},
+    "SELF_CARE":   urgency_style("SELF_CARE"),
+    "SEE_DOCTOR":  urgency_style("SEE_DOCTOR"),
+    "URGENT_CARE": urgency_style("URGENT_CARE"),
+    "EMERGENCY":   urgency_style("EMERGENCY"),
 }
 
 SOCRATES_DIMS = [
     "symptom_or_topic", "onset", "character", "radiation",
     "associations", "timing", "exacerbating", "severity",
 ]
-
-
-# ════════════════════════════════════════════════════════════════════════════
-#  HELPERS
-# ════════════════════════════════════════════════════════════════════════════
-
-def _prob_to_pct(prob_str) -> int:
-    """Convert HIGH/MEDIUM/LOW, '75%', 0.75, or 75 → int 0-100."""
-    _RANK_MAP = {"HIGH": 78, "MEDIUM": 48, "LOW": 22}
-    s = str(prob_str).strip().upper()
-    if s in _RANK_MAP:
-        return _RANK_MAP[s]
-    try:
-        s = s.replace('%', '')
-        f = float(s)
-        return int(f) if f > 1 else int(f * 100)
-    except Exception:
-        return 50
-
-
-def _prob_css_class(prob_str: str) -> str:
-    p = str(prob_str).strip().upper()
-    if p == "HIGH":   return "prob-high"
-    if p == "LOW":    return "prob-low"
-    return "prob-medium"
-
-
-def _prob_fill_color(prob_str: str) -> str:
-    p = str(prob_str).strip().upper()
-    if p == "HIGH":   return "#DC2626"
-    if p == "LOW":    return "#16A34A"
-    return "#D97706"
-
-
-def _prob_label_color(prob_str: str) -> str:
-    p = str(prob_str).strip().upper()
-    if p == "HIGH":   return "#DC2626"
-    if p == "LOW":    return "#16A34A"
-    return "#D97706"
-
-
-def _risk_badge_class(risk: str) -> str:
-    r = risk.upper()
-    if r == "LOW":    return "badge-low"
-    if r == "MEDIUM": return "badge-medium"
-    return "badge-high"
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1320,7 +1325,6 @@ def render_treatment(treatment: dict):
         st.markdown(f"""
 <div class="treatment-card">
   <div class="tc-header">
-    <div class="tc-icon">🏠</div>
     <div class="tc-title">Home Care</div>
   </div>
   <ul class="tc-list">{_li(home)}</ul>
@@ -1330,7 +1334,6 @@ def render_treatment(treatment: dict):
         st.markdown(f"""
 <div class="treatment-card">
   <div class="tc-header">
-    <div class="tc-icon">🌿</div>
     <div class="tc-title">Lifestyle Tips</div>
   </div>
   <ul class="tc-list">{_li(life)}</ul>
@@ -1340,7 +1343,6 @@ def render_treatment(treatment: dict):
         st.markdown(f"""
 <div class="treatment-card full-width">
   <div class="tc-header">
-    <div class="tc-icon">🚫</div>
     <div class="tc-title">What to Avoid</div>
   </div>
   <ul class="tc-list">{_li(avoid)}</ul>
@@ -1350,8 +1352,7 @@ def render_treatment(treatment: dict):
         st.markdown(f"""
 <div class="treatment-card full-width escalation">
   <div class="tc-header">
-    <div class="tc-icon">⏱</div>
-    <div class="tc-title">Escalation Timeline</div>
+    <div class="tc-title">What to Do Next / Escalation Timeline</div>
   </div>
   <p class="tc-escalation-text">{sanitize_html(esc)}</p>
 </div>""", unsafe_allow_html=True)
@@ -1379,8 +1380,9 @@ def render_result_panels(result: dict, bot=None):
         return
 
     if result.get("low_confidence"):
-        st.warning(
-            "Low-confidence assessment: the possible conditions below are for discussion with a doctor, not a diagnosis."
+        st.markdown(
+            '<div class="low-confidence-box">⚠️ Low-confidence assessment: the possible conditions below are for discussion with a doctor, not a diagnosis.</div>',
+            unsafe_allow_html=True,
         )
 
     render_differential(result.get("differential", []))
@@ -1412,28 +1414,30 @@ def render_result_panels(result: dict, bot=None):
         st.markdown(f'<div class="mh-banner">💙 {sanitize_html(mh_msg)}</div>',
                     unsafe_allow_html=True)
 
-    # ── Reliability badge ─────────────────────────────────────
+    # ── Reliability badge (suppressed when low_confidence is True) ─
+    is_low_conf = bool(result.get("low_confidence"))
     _icon, _label, _cls = reliability_badge(
-        risk, verdict, low_confidence=bool(result.get("low_confidence"))
+        risk, verdict, low_confidence=is_low_conf
     )
 
-    st.markdown(
-        f'<div class="badge-row"><span class="badge {_cls}">{_icon} {_label}</span></div>',
-        unsafe_allow_html=True
-    )
-
-    # ── Sources ───────────────────────────────────────────────
-    if sources:
-        pills = "".join(
-            f'<span class="source-pill">{sanitize_html(s, False)}</span>' for s in sources
-        )
+    if _label != "Well-supported" or badge_visible(is_low_conf, verdict):
         st.markdown(
-            f'<div class="sources-wrap">'
-            f'<div class="panel-section-label">Sources</div>'
-            f'<div class="sources-pills">{pills}</div>'
-            f'</div>',
+            f'<div class="badge-row"><span class="badge {_cls}">{_icon} {_label}</span></div>',
             unsafe_allow_html=True
         )
+
+    # ── Sources (collapsed by default) ─────────────────────────
+    if sources:
+        with st.expander("📚 Sources & Evidence", expanded=False):
+            pills = "".join(
+                f'<span class="source-pill">{sanitize_html(s, False)}</span>' for s in sources
+            )
+            st.markdown(
+                f'<div class="sources-wrap">'
+                f'<div class="sources-pills">{pills}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
     # ── Doctor Finder panel ───────────────────────────────────
     if bot is not None:
@@ -1643,19 +1647,35 @@ def main():
         else:
             with st.chat_message("assistant", avatar="assets/images/logo-mark_light.png"):
                 triage = msg.get("triage")
-                if triage and triage in TRIAGE_META:
-                    m = TRIAGE_META[triage]
+                res = msg.get("result") or {}
+                is_emergency = (triage == "EMERGENCY") or (res.get("type") == "emergency")
+
+                if is_emergency:
                     st.markdown(
-                        f'<div class="triage-badge triage-{triage}">'
-                        f'{m["icon"]} {m["label"]}</div>',
+                        f'<div class="emergency-banner-112">'
+                        f'<div class="emergency-banner-lead">'
+                        f'<span class="emergency-banner-badge">EMERGENCY</span>'
+                        f'<span class="emergency-banner-call">CALL <strong class="emergency-banner-number">112</strong> IMMEDIATELY</span>'
+                        f'</div>'
+                        f'<div class="emergency-banner-text">{sanitize_html(strip_rendered_emoji_prefix(msg["content"]))}</div>'
+                        f'</div>',
                         unsafe_allow_html=True,
                     )
-                st.markdown(
-                    f'<div class="bot-msg-wrap">'
-                    f'<div class="bot-bubble">{sanitize_html(strip_rendered_emoji_prefix(msg["content"]))}</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
+                else:
+                    if triage and triage in TRIAGE_META:
+                        m = TRIAGE_META[triage]
+                        st.markdown(
+                            f'<div class="triage-badge triage-{triage}">'
+                            f'{m["icon"]} {m["label"]}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    st.markdown(
+                        f'<div class="bot-msg-wrap">'
+                        f'<div class="bot-bubble">{sanitize_html(strip_rendered_emoji_prefix(msg["content"]))}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
                 if msg.get("result"):
                     render_result_panels(msg["result"], bot=bot)
 
@@ -1735,21 +1755,35 @@ def main():
 
             final_text = result.get("message", streamed_text)
             triage     = result.get("triage")
+            is_emergency = (triage == "EMERGENCY") or (result.get("type") == "emergency")
 
-            if triage and triage in TRIAGE_META:
-                m = TRIAGE_META[triage]
+            if is_emergency:
+                stream_placeholder.empty()
                 st.markdown(
-                    f'<div class="triage-badge triage-{triage}">'
-                    f'{m["icon"]} {m["label"]}</div>',
+                    f'<div class="emergency-banner-112">'
+                    f'<div class="emergency-banner-lead">'
+                    f'<span class="emergency-banner-badge">EMERGENCY</span>'
+                    f'<span class="emergency-banner-call">CALL <strong class="emergency-banner-number">112</strong> IMMEDIATELY</span>'
+                    f'</div>'
+                    f'<div class="emergency-banner-text">{sanitize_html(strip_rendered_emoji_prefix(final_text))}</div>'
+                    f'</div>',
                     unsafe_allow_html=True,
                 )
+            else:
+                if triage and triage in TRIAGE_META:
+                    m = TRIAGE_META[triage]
+                    st.markdown(
+                        f'<div class="triage-badge triage-{triage}">'
+                        f'{m["icon"]} {m["label"]}</div>',
+                        unsafe_allow_html=True,
+                    )
 
-            stream_placeholder.markdown(
-                f'<div class="bot-msg-wrap">'
-                f'<div class="bot-bubble">{sanitize_html(strip_rendered_emoji_prefix(final_text))}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
+                stream_placeholder.markdown(
+                    f'<div class="bot-msg-wrap">'
+                    f'<div class="bot-bubble">{sanitize_html(strip_rendered_emoji_prefix(final_text))}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
             render_result_panels(result, bot=bot)
 
