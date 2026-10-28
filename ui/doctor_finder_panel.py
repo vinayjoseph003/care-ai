@@ -69,6 +69,11 @@ _CSS = """
     gap: 10px;
     margin-bottom: 0.6rem;
 }
+@media (max-width: 480px) {
+    .df-card-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
 .df-card {
     position: relative;
     background: #FFFFFF;
