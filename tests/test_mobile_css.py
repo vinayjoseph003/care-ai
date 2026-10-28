@@ -126,6 +126,116 @@ class TestMobileCSS(unittest.TestCase):
         self.assertIn('alt="Care-AI logo"', self.app_content)
         logo_path = os.path.join(PROJECT_ROOT, "assets", "images", "logo-light.png")
         self.assertTrue(os.path.isfile(logo_path), f"Logo file does not exist at {logo_path}")
+    def test_i_content_max_width_820px(self):
+        """(i) .block-container content max-width is set to 820px."""
+        self.assertTrue(
+            re.search(r'\.block-container\s*\{[^}]*max-width\s*:\s*820px', self.app_content),
+            "Expected .block-container to have max-width: 820px."
+        )
+
+    def test_j_chat_input_pill_and_focus_within(self):
+        """(j) Chat input pill has :focus-within styling with 2px teal focus ring."""
+        self.assertIn(":focus-within", self.app_content)
+        pattern = r'\[data-testid="stChatInput"\]\s*>\s*div:focus-within[^{]*\{[^}]*box-shadow\s*:\s*0\s+0\s+0\s+2px'
+        self.assertTrue(
+            re.search(pattern, self.app_content),
+            "Expected [data-testid=\"stChatInput\"] > div:focus-within to have 2px focus ring."
+        )
+
+    def test_k_spinner_prefers_reduced_motion(self):
+        """(k) Spinner has animation duration <=200ms and honours prefers-reduced-motion."""
+        pattern_anim = r'\[data-testid="stSpinner"\]\s*>\s*div\s*\{[^}]*animation-duration\s*:\s*200ms'
+        self.assertTrue(
+            re.search(pattern_anim, self.app_content),
+            "Expected [data-testid=\"stSpinner\"] > div to have animation-duration <= 200ms."
+        )
+        pattern_reduced = r'@media\s*\(prefers-reduced-motion\s*:\s*reduce\)\s*\{[^}]*\[data-testid="stSpinner"\]\s*>\s*div\s*\{[^}]*animation\s*:\s*none'
+        self.assertTrue(
+            re.search(pattern_reduced, self.app_content, re.DOTALL),
+            "Expected @media (prefers-reduced-motion: reduce) to disable spinner animation."
+        )
+
+    def test_l_logo_loader_cached(self):
+        """(l) _load_asset_b64 is decorated with @st.cache_data."""
+        pattern_cache = r'@st\.cache_data\s*\ndef _load_asset_b64\('
+        self.assertTrue(
+            re.search(pattern_cache, self.app_content),
+            "Expected _load_asset_b64 to be decorated with @st.cache_data."
+        )
+    def test_m_no_unconditional_st_logo(self):
+        """(m) No unconditional st.logo( call in ui/app.py."""
+        self.assertNotIn("st.logo(", self.app_content)
+
+    def test_n_assistant_avatar_logo_mark(self):
+        """(n) Assistant chat message uses logo-mark_light.png as avatar."""
+        self.assertIn('with st.chat_message("assistant", avatar="assets/images/logo-mark_light.png"):', self.app_content)
+
+    def test_o_no_hospital_emoji_in_assistant_render(self):
+        """(o) No hospital emoji in assistant chat_message or bot-avatar render path."""
+        self.assertNotIn('avatar="🏥"', self.app_content)
+        self.assertNotIn('<div class="bot-avatar">🏥</div>', self.app_content)
+
+    def test_p_user_avatar_hidden(self):
+        """(p) [data-testid="stChatMessageAvatarUser"] is hidden via CSS."""
+        pattern = r'\[data-testid="stChatMessageAvatarUser"\]\s*\{[^}]*display\s*:\s*none'
+        self.assertTrue(
+            re.search(pattern, self.app_content),
+            "Expected [data-testid=\"stChatMessageAvatarUser\"] to have display: none."
+        )
+
+    def test_q_sidebar_logo_mix_blend_mode(self):
+        """(q) Sidebar logo has mix-blend-mode: multiply."""
+        self.assertIn("mix-blend-mode", self.app_content)
+        self.assertIn("multiply", self.app_content)
+
+    def test_r_new_chat_button_nowrap(self):
+        """(r) Button CSS has white-space: nowrap."""
+        self.assertIn("white-space: nowrap", self.app_content)
+
+    def test_s_chat_input_focus_ring_on_pill_only(self):
+        """(s) Focus ring is applied only to pill (:focus-within on pill child), not outer stChatInput."""
+        pattern_outer = r'\[data-testid="stChatInput"\][^{]*\{[^}]*box-shadow\s*:\s*none'
+        self.assertTrue(
+            re.search(pattern_outer, self.app_content),
+            "Expected outer [data-testid=\"stChatInput\"] to have box-shadow: none."
+        )
+        self.assertFalse(
+            bool(re.search(r'\[data-testid="stChatInput"\]:focus-within\s*\{[^}]*box-shadow\s*:\s*0\s+0\s+0\s+2px', self.app_content)),
+            "Outer stChatInput must not have 2px focus ring box-shadow."
+        )
+        pattern_pill = r'\[data-testid="stChatInput"\]\s*>\s*div:focus-within[^{]*\{[^}]*box-shadow\s*:\s*0\s+0\s+0\s+2px'
+        self.assertTrue(
+            re.search(pattern_pill, self.app_content),
+            "Expected [data-testid=\"stChatInput\"] > div:focus-within to have 2px focus ring."
+        )
+
+    def test_t_bottom_container_max_width_820px(self):
+        """(t) Bottom input container has max-width: 820px and solid #F2F8F8 background."""
+        pattern = r'\[data-testid="stBottom"\][^{]*\{[^}]*max-width\s*:\s*820px'
+        self.assertTrue(
+            re.search(pattern, self.app_content),
+            "Expected [data-testid=\"stBottom\"] to specify max-width: 820px."
+        )
+    def test_u_strip_rendered_emoji_prefix(self):
+        """(u) strip_rendered_emoji_prefix behaves correctly and does not raise NameError."""
+        import sys
+        from unittest.mock import MagicMock
+        for _mod in ("scipy", "scipy.sparse"):
+            if _mod not in sys.modules:
+                sys.modules[_mod] = MagicMock()
+
+        from ui.app import strip_rendered_emoji_prefix
+
+        # Test cases specified in prompt
+        self.assertEqual(strip_rendered_emoji_prefix("🏥 Hello"), "Hello")
+        self.assertEqual(strip_rendered_emoji_prefix("Hello"), "Hello")
+        self.assertEqual(strip_rendered_emoji_prefix(""), "")
+        self.assertEqual(strip_rendered_emoji_prefix(None), "")
+        # Middle emoji must not be removed
+        self.assertEqual(strip_rendered_emoji_prefix("Hello 🏥 world"), "Hello 🏥 world")
+
+
+
 
 
 if __name__ == "__main__":

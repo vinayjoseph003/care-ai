@@ -6,9 +6,11 @@ Run with: streamlit run ui/app.py
 
 import os
 import sys
+import re
 import queue
 import html
 import threading
+import traceback
 import base64
 import streamlit as st
 from dotenv import load_dotenv
@@ -44,6 +46,13 @@ def _get_setting(key: str, default: str = "") -> str:
     except Exception:
         pass
     return default
+
+
+def strip_rendered_emoji_prefix(text: str) -> str:
+    """Strip leading hospital/doctor emoji from rendered text without altering stored messages."""
+    if not text:
+        return ""
+    return re.sub(r'^[🏥🩺\s]+', '', str(text))
 
 
 def sanitize_html(text: str, preserve_newlines: bool = True) -> str:
@@ -86,6 +95,7 @@ _LOGO_LIGHT_PATH = os.path.join(_ASSETS_DIR, "logo-light.png")
 _LOGO_MARK_PATH = os.path.join(_ASSETS_DIR, "logo-mark_light.png")
 
 
+@st.cache_data
 def _load_asset_b64(path: str) -> str:
     try:
         if os.path.exists(path):
@@ -106,10 +116,7 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-st.logo(
-    "assets/images/logo-light.png",
-    icon_image="assets/images/logo-mark_light.png",
-)
+
 
 # ════════════════════════════════════════════════════════════════════════════
 #  CUSTOM CSS — Light professional medical theme
@@ -171,7 +178,8 @@ html, body, [class*="css"] {
 .block-container {
   background: transparent !important;
   padding: 1.6rem 2.2rem 4rem !important;
-  max-width: 1160px;
+  max-width: 820px !important;
+  margin: 0 auto;
 }
 
 /* ── Scrollbar ────────────────────────────────────────────── */
@@ -197,12 +205,9 @@ html, body, [class*="css"] {
   padding: 56px 1rem 1.1rem !important;
   background-color: var(--bg) !important;
 }
-[data-testid="stSidebarHeader"] {
-  background-color: var(--bg) !important;
-  padding-bottom: 0.5rem !important;
-}
+[data-testid="stSidebarHeader"],
 [data-testid="stLogo"] {
-  background-color: transparent !important;
+  display: none !important;
 }
 
 /* Sidebar brand lockup */
@@ -219,6 +224,7 @@ html, body, [class*="css"] {
   max-width: 100%;
   height: auto;
   display: block;
+  mix-blend-mode: multiply !important;
 }
 
 /* Language badge — topmost prominent element */
@@ -237,17 +243,17 @@ html, body, [class*="css"] {
   flex-shrink: 0;
 }
 .sb-lang-label {
-  font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   color: var(--teal-dark) !important;
   margin-bottom: 0.15rem;
 }
 .sb-lang-value {
-  font-family: var(--mono);
-  font-size: 1rem;
-  font-weight: 700;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 600;
   color: var(--text) !important;
   line-height: 1.2;
 }
@@ -261,16 +267,16 @@ html, body, [class*="css"] {
   margin-bottom: 0.5rem;
 }
 .sb-metric-label {
-  font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   color: var(--text-muted) !important;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.2rem;
 }
 .sb-metric-value {
-  font-family: var(--mono);
-  font-size: 0.88rem;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--text) !important;
 }
@@ -283,12 +289,12 @@ html, body, [class*="css"] {
 
 /* Sidebar section divider */
 .sb-section {
-  font-family: var(--mono);
-  font-size: 0.57rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   color: var(--text-dim) !important;
-  margin: 1rem 0 0.5rem;
+  margin: 1.2rem 0 0.5rem;
   padding-bottom: 0.3rem;
   border-bottom: 1px solid var(--border);
 }
@@ -308,17 +314,17 @@ html, body, [class*="css"] {
   margin-bottom: 0.45rem;
 }
 .sb-progress-title {
-  font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   color: var(--text-muted) !important;
 }
 .sb-progress-count {
-  font-family: var(--mono);
-  font-size: 0.68rem;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
   font-weight: 600;
-  color: var(--teal) !important;
+  color: var(--teal-dark) !important;
 }
 .sb-progress-bar-bg {
   height: 4px;
@@ -353,8 +359,8 @@ html, body, [class*="css"] {
 
 /* Sidebar disclaimer */
 .sb-disclaimer {
-  font-family: var(--serif);
-  font-size: 0.73rem;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
   color: var(--text-muted) !important;
   line-height: 1.55;
   padding: 0.7rem 0.9rem;
@@ -365,6 +371,10 @@ html, body, [class*="css"] {
 }
 
 /* Streamlit button overrides inside sidebar */
+.stButton button,
+div[data-testid="stColumn"] .stButton button {
+  white-space: nowrap !important;
+}
 [data-testid="stSidebar"] .stButton button {
   background: var(--surface2) !important;
   border: 1px solid var(--border) !important;
@@ -375,6 +385,7 @@ html, body, [class*="css"] {
   border-radius: var(--radius-sm) !important;
   padding: 0.45rem 0.8rem !important;
   transition: border-color 0.15s, background 0.15s !important;
+  white-space: nowrap !important;
 }
 [data-testid="stSidebar"] .stButton button:hover {
   border-color: var(--border-hi) !important;
@@ -397,12 +408,12 @@ html, body, [class*="css"] {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-family: var(--mono);
-  font-size: 1.25rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
+  font-family: var(--font-sans);
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--navy) !important;
-  line-height: 1.1;
+  line-height: 1.2;
   margin: 0;
 }
 .main-title-mark {
@@ -413,11 +424,12 @@ html, body, [class*="css"] {
   vertical-align: middle;
 }
 .main-subtitle {
-  font-family: var(--serif);
-  font-size: 0.82rem;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
   color: var(--text-muted);
-  margin-top: 0.3rem;
-  font-style: italic;
+  margin-top: 0.25rem;
+  font-style: normal;
+  font-weight: 400;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -431,54 +443,58 @@ html, body, [class*="css"] {
   padding: 0 !important;
   box-shadow: none !important;
 }
+[data-testid="stChatMessageAvatarUser"] {
+  display: none !important;
+}
 
 /* User bubble — right-aligned */
 .user-msg-wrap {
   display: flex;
   justify-content: flex-end;
-  margin: 0.6rem 0;
+  margin: 8px 0;
 }
 .user-bubble {
-  background: var(--accent);
-  border: none;
-  border-radius: 16px 16px 3px 16px;
-  padding: 0.8rem 1.1rem;
-  max-width: 72%;
-  font-family: var(--serif);
-  font-size: 0.93rem;
-  line-height: 1.6;
-  color: #FFFFFF;
+  background: #E3F7F4;
+  border: 1px solid #C4ECE5;
+  border-radius: 16px 16px 4px 16px;
+  padding: 10px 16px;
+  max-width: 75%;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: #061A3A;
 }
 
 /* Bot message container */
 .bot-msg-wrap {
   display: flex;
   align-items: flex-start;
-  gap: 0.8rem;
-  margin: 0.6rem 0;
+  gap: 12px;
+  margin: 8px 0;
 }
 .bot-avatar {
   width: 32px; height: 32px;
-  background: var(--teal-dim);
-  border: 1.5px solid var(--teal);
+  background: #FFFFFF;
+  border: 1px solid #D5E4E4;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 0.9rem;
   flex-shrink: 0;
-  margin-top: 3px;
+  margin-top: 2px;
+  box-shadow: 0 1px 3px rgba(6, 26, 58, 0.04);
 }
 .bot-bubble {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 3px 16px 16px 16px;
-  padding: 0.9rem 1.2rem;
-  max-width: 84%;
-  font-family: var(--serif);
-  font-size: 0.93rem;
-  line-height: 1.65;
-  color: var(--text);
+  background: #FFFFFF;
+  border: 1px solid #D5E4E4;
+  border-radius: 4px 16px 16px 16px;
+  padding: 12px 18px;
+  max-width: 85%;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #061A3A;
   flex: 1;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  box-shadow: 0 1px 3px rgba(6, 26, 58, 0.04), 0 1px 2px rgba(6, 26, 58, 0.02);
 }
 
 /* Triage banner */
@@ -819,27 +835,60 @@ html, body, [class*="css"] {
 }
 
 /* ══════════════════════════════════════════════════════════
-   CHAT INPUT
+   CHAT INPUT & BOTTOM CONTAINER
 ══════════════════════════════════════════════════════════ */
+[data-testid="stBottom"],
+[data-testid="stBottomBlockContainer"] {
+  background-color: #F2F8F8 !important;
+  background: #F2F8F8 !important;
+  max-width: 820px !important;
+  margin: 0 auto !important;
+}
+[data-testid="stBottom"] > div {
+  max-width: 820px !important;
+  margin: 0 auto !important;
+  background-color: #F2F8F8 !important;
+}
 [data-testid="stChatInput"] {
-  border-top: 1px solid var(--border) !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
   padding-top: 0.8rem !important;
 }
-[data-testid="stChatInput"] textarea {
-  background: #FFFFFF !important;
-  border: 1.5px solid #CBD5E0 !important;
-  color: var(--text) !important;
-  font-family: var(--serif) !important;
-  font-size: 0.92rem !important;
-  border-radius: var(--radius-md) !important;
-  padding: 0.75rem 1rem !important;
+[data-testid="stChatInput"]:focus,
+[data-testid="stChatInput"]:focus-within {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
-[data-testid="stChatInput"] textarea:focus {
+[data-testid="stChatInput"] > div {
+  border-radius: 9999px !important;
+  border: 1px solid var(--border) !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 1px 4px rgba(6, 26, 58, 0.04) !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+[data-testid="stChatInput"] > div:focus-within {
   border-color: var(--teal) !important;
-  box-shadow: 0 0 0 3px rgba(8,145,178,0.08) !important;
+  box-shadow: 0 0 0 2px var(--teal) !important;
+  outline: none !important;
+}
+[data-testid="stChatInput"] textarea,
+[data-testid="stChatInput"] textarea:focus,
+[data-testid="stChatInput"] textarea:focus-visible {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  color: var(--text) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 0.95rem !important;
+  border-radius: 9999px !important;
+  padding: 0.75rem 1.25rem !important;
 }
 [data-testid="stChatInput"] textarea::placeholder {
-  color: #718096 !important;
+  color: var(--text-dim) !important;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -859,21 +908,21 @@ html, body, [class*="css"] {
   text-align: center;
   padding: 3.5rem 2rem;
   background: #FFFFFF;
-  border: 1px solid #CBD5E0;
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 4px rgba(6, 26, 58, 0.04);
 }
 .empty-state-icon {
   font-size: 2.5rem;
   margin-bottom: 1rem;
-  opacity: 0.6;
+  opacity: 0.8;
 }
 .empty-state-title {
-  font-family: var(--mono);
-  font-size: 0.8rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #1A202C;
+  font-family: var(--font-sans);
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--navy);
   margin-bottom: 0.5rem;
 }
 .empty-state-langs {
@@ -884,18 +933,28 @@ html, body, [class*="css"] {
   margin-top: 1rem;
 }
 .lang-chip {
-  font-family: var(--mono);
-  font-size: 0.65rem;
-  padding: 3px 10px;
-  border: 1px solid #0891B2;
-  border-radius: 20px;
-  color: #0891B2;
-  background: #CFFAFE;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  color: var(--teal-dark);
+  background: var(--surface2);
 }
 
 /* Streamlit spinner override */
 [data-testid="stSpinner"] > div {
+  border-width: 2px !important;
   border-color: var(--teal) transparent transparent !important;
+  animation-duration: 200ms !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-testid="stSpinner"] > div {
+    animation: none !important;
+    border-color: var(--teal) !important;
+    opacity: 0.7 !important;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1078,7 +1137,7 @@ def render_sidebar(bot):
         # Brand
         st.markdown(f"""
 <div class="sb-brand">
-  <img src="data:image/png;base64,{_LOGO_LIGHT_B64}" class="sb-brand-logo" alt="Care-AI logo" width="180">
+  <img src="data:image/png;base64,{_LOGO_LIGHT_B64}" class="sb-brand-logo" alt="Care-AI logo" width="180" style="mix-blend-mode: multiply;">
 </div>""", unsafe_allow_html=True)
 
         # ── Detected language — topmost prominent badge ───────
@@ -1527,7 +1586,7 @@ def main():
     render_sidebar(bot)
 
     # ── Header ────────────────────────────────────────────────
-    col_title, col_btn = st.columns([6, 1])
+    col_title, col_btn = st.columns([3.5, 1.2])
     with col_title:
         st.markdown(f"""
 <div class="main-header">
@@ -1582,7 +1641,7 @@ def main():
                     unsafe_allow_html=True,
                 )
         else:
-            with st.chat_message("assistant", avatar="🏥"):
+            with st.chat_message("assistant", avatar="assets/images/logo-mark_light.png"):
                 triage = msg.get("triage")
                 if triage and triage in TRIAGE_META:
                     m = TRIAGE_META[triage]
@@ -1593,8 +1652,7 @@ def main():
                     )
                 st.markdown(
                     f'<div class="bot-msg-wrap">'
-                    f'<div class="bot-avatar">🏥</div>'
-                    f'<div class="bot-bubble">{sanitize_html(msg["content"])}</div>'
+                    f'<div class="bot-bubble">{sanitize_html(strip_rendered_emoji_prefix(msg["content"]))}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -1615,7 +1673,7 @@ def main():
         st.session_state.messages.append({"role": "user", "content": user_input})
 
         # ── Bot response ──────────────────────────────────────
-        with st.chat_message("assistant", avatar="🏥"):
+        with st.chat_message("assistant", avatar="assets/images/logo-mark_light.png"):
             tq            = TokenQueue()
             result_holder = []
 
@@ -1637,8 +1695,7 @@ def main():
                     streamed_text += token
                     stream_placeholder.markdown(
                         f'<div class="bot-msg-wrap">'
-                        f'<div class="bot-avatar">🏥</div>'
-                        f'<div class="bot-bubble">{sanitize_html(streamed_text)}▌</div>'
+                        f'<div class="bot-bubble">{sanitize_html(strip_rendered_emoji_prefix(streamed_text))}▌</div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
@@ -1650,8 +1707,7 @@ def main():
                 msg_text = result.get("message", SAFE_UNAVAILABLE_MESSAGE)
                 stream_placeholder.markdown(
                     f'<div class="bot-msg-wrap">'
-                    f'<div class="bot-avatar">🏥</div>'
-                    f'<div class="bot-bubble">{sanitize_html(msg_text)}</div>'
+                    f'<div class="bot-bubble">{sanitize_html(strip_rendered_emoji_prefix(msg_text))}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -1690,8 +1746,7 @@ def main():
 
             stream_placeholder.markdown(
                 f'<div class="bot-msg-wrap">'
-                f'<div class="bot-avatar">🏥</div>'
-                f'<div class="bot-bubble">{sanitize_html(final_text)}</div>'
+                f'<div class="bot-bubble">{sanitize_html(strip_rendered_emoji_prefix(final_text))}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
