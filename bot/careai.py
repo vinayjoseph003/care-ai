@@ -412,8 +412,8 @@ class CareAI:
     def _emergency_msg(self):
         return (
             "MEDICAL EMERGENCY DETECTED\n\n"
-            "Please call your local emergency number (911 / 112 / 999) IMMEDIATELY\n"
-            "or go to the nearest emergency room. Do not wait.\n\n"
+            "Please call 112 (India's emergency number) IMMEDIATELY\n"
+            "or go to the nearest emergency room. In many states you can also call 108 for an ambulance. Do not wait.\n\n"
             "Your safety is the top priority right now."
         )
 
