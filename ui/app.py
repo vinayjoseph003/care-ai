@@ -6,9 +6,12 @@ Run with: streamlit run ui/app.py
 
 import os
 import sys
+import re
 import queue
 import html
 import threading
+import traceback
+import base64
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -45,47 +48,52 @@ def _get_setting(key: str, default: str = "") -> str:
     return default
 
 
-def sanitize_html(text: str, preserve_newlines: bool = True) -> str:
-    """Safely escape user and model text before inserting into HTML templates."""
-    if not text:
-        return ""
-    escaped = html.escape(str(text))
-    if preserve_newlines:
-        return escaped.replace("\n", "<br>")
-    return escaped
-
-
-def top_diagnosis_label(xai_logs: list | None, last_top: str | None) -> str:
-    """Return 'Not determined' if latest assessment was low_confidence, else last_top."""
-    is_low_conf = bool(xai_logs[-1].get("low_confidence")) if xai_logs else False
-    if is_low_conf:
-        return "Not determined"
-    return str(last_top).strip() if last_top else ""
-
-
-def reliability_badge(risk: str | None, verdict: str | None, low_confidence: bool = False) -> tuple[str, str, str]:
-    """Return (_icon, _label, _cls) for hallucination risk / verification status."""
-    _risk_up    = str(risk).upper()
-    _verdict_up = str(verdict).upper()
-    if _risk_up == "HIGH" or _verdict_up in ("UNVERIFIED", "FAILED"):
-        return ("⚠️", "Verify with doctor", "badge-high")
-    if low_confidence:
-        return ("🟡", "Confirm with doctor", "badge-medium")
-    if _risk_up == "LOW" and _verdict_up == "VERIFIED":
-        return ("✅", "Well-supported", "badge-low")
-    return ("🟡", "Confirm with doctor", "badge-medium")
+from ui.helpers import (
+    strip_rendered_emoji_prefix,
+    sanitize_html,
+    top_diagnosis_label,
+    reliability_badge,
+    badge_visible,
+    urgency_style,
+    _prob_to_pct,
+    _prob_css_class,
+    _prob_fill_color,
+    _prob_label_color,
+    _risk_badge_class,
+)
 
 
 # ════════════════════════════════════════════════════════════════════════════
 #  PAGE CONFIG
 # ════════════════════════════════════════════════════════════════════════════
 
+_ASSETS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "images"))
+_LOGO_LIGHT_PATH = os.path.join(_ASSETS_DIR, "logo-light.png")
+_LOGO_MARK_PATH = os.path.join(_ASSETS_DIR, "logo-mark_light.png")
+
+
+@st.cache_data
+def _load_asset_b64(path: str) -> str:
+    try:
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                return base64.b64encode(f.read()).decode("utf-8")
+    except Exception:
+        pass
+    return ""
+
+
+_LOGO_LIGHT_B64 = _load_asset_b64(_LOGO_LIGHT_PATH) or _load_asset_b64("assets/images/logo-light.png")
+_LOGO_MARK_B64 = _load_asset_b64(_LOGO_MARK_PATH) or _load_asset_b64("assets/images/logo-mark_light.png")
+
 st.set_page_config(
     page_title="Care-AI · Medical Assistant",
-    page_icon="🏥",
+    page_icon="assets/images/logo-mark_light.png",
     layout="wide",
     initial_sidebar_state="auto",
 )
+
+
 
 # ════════════════════════════════════════════════════════════════════════════
 #  CUSTOM CSS — Light professional medical theme
@@ -93,19 +101,25 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,300&display=swap');
-
 /* ── Design tokens ───────────────────────────────────────── */
 :root {
-  --bg:          #F0F4F8;
+  --navy:        #061A3A;
+  --text:        #061A3A;
+  --text-muted:  #243B5A;
+  --text-dim:    #4A5D6E;
+  --bg:          #F2F8F8;
   --surface:     #FFFFFF;
-  --surface2:    #F7FAFC;
-  --surface3:    #EDF2F7;
-  --border:      #CBD5E0;
-  --border-hi:   #A0AEC0;
-  --text:        #1A202C;
-  --text-muted:  #4A5568;
-  --text-dim:    #718096;
+  --surface2:    #E7EFEF;
+  --surface3:    #DCEBEB;
+  --border:      #CFDFDF;
+  --border-hi:   #A8C5C5;
+  --teal:        #10D4B8;
+  --teal-dark:   #06695C;
+  --teal-deep:   #04544A;
+  --teal-dim:    rgba(16, 212, 184, 0.12);
+  --cyan:        #1BC8D8;
+  --blue:        #0EA5C9;
+  --soft-green:  #7FE0B8;
   --green:       #16A34A;
   --green-dim:   #DCFCE7;
   --yellow:      #D97706;
@@ -114,14 +128,12 @@ st.markdown("""
   --red-dim:     #FEE2E2;
   --orange:      #EA580C;
   --orange-dim:  #FFEDD5;
-  --blue:        #2563EB;
-  --blue-dim:    #DBEAFE;
-  --teal:        #0891B2;
-  --teal-dim:    #CFFAFE;
-  --accent:      #2563EB;
-  --accent-dim:  #DBEAFE;
-  --mono:        'IBM Plex Mono', 'Courier New', monospace;
-  --serif:       'Source Serif 4', Georgia, serif;
+  --accent:      #06695C;
+  --accent-dim:  rgba(6, 105, 92, 0.12);
+  --font-sans:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans Devanagari", "Noto Sans Telugu", "Noto Sans Tamil", sans-serif;
+  --font-mono:   ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --mono:        var(--font-mono);
+  --serif:       var(--font-sans);
   --radius-sm:   6px;
   --radius-md:   10px;
   --radius-lg:   14px;
@@ -131,7 +143,16 @@ st.markdown("""
 html, body, [class*="css"] {
   background-color: var(--bg) !important;
   color: var(--text) !important;
-  font-family: var(--serif) !important;
+  font-family: var(--font-sans) !important;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--teal) !important;
+  outline-offset: 2px !important;
+}
+
+.stApp, [data-testid="stAppViewContainer"] {
+  background-color: var(--bg) !important;
 }
 
 /* ── Hide Streamlit chrome ───────────────────────────────── */
@@ -139,14 +160,15 @@ html, body, [class*="css"] {
 .block-container {
   background: transparent !important;
   padding: 1.6rem 2.2rem 4rem !important;
-  max-width: 1160px;
+  max-width: 820px !important;
+  margin: 0 auto;
 }
 
 /* ── Scrollbar ────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: #CBD5E0;
+  background: var(--border);
   border-radius: 3px;
 }
 
@@ -154,7 +176,7 @@ html, body, [class*="css"] {
    SIDEBAR
 ══════════════════════════════════════════════════════════ */
 [data-testid="stSidebar"] {
-  background: var(--surface) !important;
+  background-color: var(--bg) !important;
   border-right: 1px solid var(--border) !important;
   min-width: 248px !important;
   max-width: 300px !important;
@@ -162,40 +184,28 @@ html, body, [class*="css"] {
 [data-testid="stSidebar"] * { color: var(--text) !important; }
 [data-testid="stSidebar"] > div:first-child {
   overflow-y: auto !important;
-  padding: 1.1rem 1rem !important;
+  padding: 56px 1rem 1.1rem !important;
+  background-color: var(--bg) !important;
+}
+[data-testid="stSidebarHeader"],
+[data-testid="stLogo"] {
+  display: none !important;
 }
 
 /* Sidebar brand lockup */
 .sb-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0.2rem 0 1.2rem;
+  justify-content: flex-start;
+  padding: 0.2rem 0 1rem;
   margin-bottom: 1rem;
   border-bottom: 1px solid var(--border);
 }
-.sb-brand-icon {
-  width: 36px; height: 36px;
-  background: linear-gradient(135deg, var(--teal-dim), var(--accent-dim));
-  border: 1px solid rgba(8,145,178,0.2);
-  border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px;
-  flex-shrink: 0;
-}
-.sb-brand-name {
-  font-family: var(--mono);
-  font-size: 0.9rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  color: var(--teal) !important;
-  line-height: 1.1;
-}
-.sb-brand-ver {
-  font-family: var(--mono);
-  font-size: 0.6rem;
-  color: var(--text-muted) !important;
-  letter-spacing: 0.08em;
+.sb-brand-logo {
+  width: 180px;
+  max-width: 100%;
+  height: auto;
+  display: block;
 }
 
 /* Language badge — topmost prominent element */
@@ -214,17 +224,17 @@ html, body, [class*="css"] {
   flex-shrink: 0;
 }
 .sb-lang-label {
-  font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--teal) !important;
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--teal-dark) !important;
   margin-bottom: 0.15rem;
 }
 .sb-lang-value {
-  font-family: var(--mono);
-  font-size: 1rem;
-  font-weight: 700;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 600;
   color: var(--text) !important;
   line-height: 1.2;
 }
@@ -238,20 +248,20 @@ html, body, [class*="css"] {
   margin-bottom: 0.5rem;
 }
 .sb-metric-label {
-  font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   color: var(--text-muted) !important;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.2rem;
 }
 .sb-metric-value {
-  font-family: var(--mono);
-  font-size: 0.88rem;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--text) !important;
 }
-.sv-teal   { color: var(--teal)   !important; }
+.sv-teal   { color: var(--teal-dark)   !important; }
 .sv-green  { color: var(--green)  !important; }
 .sv-yellow { color: var(--yellow) !important; }
 .sv-orange { color: var(--orange) !important; }
@@ -260,12 +270,12 @@ html, body, [class*="css"] {
 
 /* Sidebar section divider */
 .sb-section {
-  font-family: var(--mono);
-  font-size: 0.57rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   color: var(--text-dim) !important;
-  margin: 1rem 0 0.5rem;
+  margin: 1.2rem 0 0.5rem;
   padding-bottom: 0.3rem;
   border-bottom: 1px solid var(--border);
 }
@@ -285,17 +295,17 @@ html, body, [class*="css"] {
   margin-bottom: 0.45rem;
 }
 .sb-progress-title {
-  font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   color: var(--text-muted) !important;
 }
 .sb-progress-count {
-  font-family: var(--mono);
-  font-size: 0.68rem;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
   font-weight: 600;
-  color: var(--teal) !important;
+  color: var(--teal-dark) !important;
 }
 .sb-progress-bar-bg {
   height: 4px;
@@ -330,8 +340,8 @@ html, body, [class*="css"] {
 
 /* Sidebar disclaimer */
 .sb-disclaimer {
-  font-family: var(--serif);
-  font-size: 0.73rem;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
   color: var(--text-muted) !important;
   line-height: 1.55;
   padding: 0.7rem 0.9rem;
@@ -342,6 +352,10 @@ html, body, [class*="css"] {
 }
 
 /* Streamlit button overrides inside sidebar */
+.stButton button,
+div[data-testid="stColumn"] .stButton button {
+  white-space: nowrap !important;
+}
 [data-testid="stSidebar"] .stButton button {
   background: var(--surface2) !important;
   border: 1px solid var(--border) !important;
@@ -352,6 +366,7 @@ html, body, [class*="css"] {
   border-radius: var(--radius-sm) !important;
   padding: 0.45rem 0.8rem !important;
   transition: border-color 0.15s, background 0.15s !important;
+  white-space: nowrap !important;
 }
 [data-testid="stSidebar"] .stButton button:hover {
   border-color: var(--border-hi) !important;
@@ -371,20 +386,33 @@ html, body, [class*="css"] {
 }
 .main-header-left {}
 .main-title {
-  font-family: var(--mono);
-  font-size: 1.25rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  color: var(--teal) !important;
-  line-height: 1.1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-sans);
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--navy) !important;
+  line-height: 1.2;
   margin: 0;
 }
+.main-title-mark {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  display: inline-block;
+  vertical-align: middle;
+  background: transparent !important;
+  border: none !important;
+}
 .main-subtitle {
-  font-family: var(--serif);
-  font-size: 0.82rem;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
   color: var(--text-muted);
-  margin-top: 0.3rem;
-  font-style: italic;
+  margin-top: 0.25rem;
+  font-style: normal;
+  font-weight: 400;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -398,54 +426,68 @@ html, body, [class*="css"] {
   padding: 0 !important;
   box-shadow: none !important;
 }
+[data-testid="stChatMessageAvatarAssistant"],
+[data-testid="stChatMessageAvatarUser"] {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+[data-testid="stChatMessageAvatarAssistant"] img {
+  background: transparent !important;
+}
+[data-testid="stChatMessageAvatarUser"] {
+  display: none !important;
+}
 
 /* User bubble — right-aligned */
 .user-msg-wrap {
   display: flex;
   justify-content: flex-end;
-  margin: 0.6rem 0;
+  margin: 8px 0;
 }
 .user-bubble {
-  background: var(--accent);
-  border: none;
-  border-radius: 16px 16px 3px 16px;
-  padding: 0.8rem 1.1rem;
-  max-width: 72%;
-  font-family: var(--serif);
-  font-size: 0.93rem;
-  line-height: 1.6;
-  color: #FFFFFF;
+  background: #E3F7F4;
+  border: 1px solid #C4ECE5;
+  border-radius: 16px 16px 4px 16px;
+  padding: 10px 16px;
+  max-width: 75%;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: #061A3A;
 }
 
 /* Bot message container */
 .bot-msg-wrap {
   display: flex;
   align-items: flex-start;
-  gap: 0.8rem;
-  margin: 0.6rem 0;
+  gap: 12px;
+  margin: 8px 0;
 }
 .bot-avatar {
   width: 32px; height: 32px;
-  background: var(--teal-dim);
-  border: 1.5px solid var(--teal);
+  background: #FFFFFF;
+  border: 1px solid #D5E4E4;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 0.9rem;
   flex-shrink: 0;
-  margin-top: 3px;
+  margin-top: 2px;
+  box-shadow: 0 1px 3px rgba(6, 26, 58, 0.04);
 }
 .bot-bubble {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 3px 16px 16px 16px;
-  padding: 0.9rem 1.2rem;
-  max-width: 84%;
-  font-family: var(--serif);
-  font-size: 0.93rem;
-  line-height: 1.65;
-  color: var(--text);
+  background: #FFFFFF;
+  border: 1px solid #D5E4E4;
+  border-radius: 4px 16px 16px 16px;
+  padding: 12px 18px;
+  max-width: 85%;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #061A3A;
   flex: 1;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  box-shadow: 0 1px 3px rgba(6, 26, 58, 0.04), 0 1px 2px rgba(6, 26, 58, 0.02);
 }
 
 /* Triage banner */
@@ -453,13 +495,12 @@ html, body, [class*="css"] {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-family: var(--mono);
-  font-size: 0.62rem;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   padding: 4px 12px;
-  border-radius: 4px;
+  border-radius: 6px;
   margin-bottom: 0.8rem;
 }
 .triage-SELF_CARE {
@@ -483,8 +524,76 @@ html, body, [class*="css"] {
   border: 1px solid #DC2626;
   animation: triage-pulse 2s ease-in-out infinite;
 }
+.triage-DEFAULT {
+  background: #E7EFEF;
+  color: #061A3A;
+  border: 1px solid #CBD5E0;
+}
 @keyframes triage-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); }
+  50%       { box-shadow: 0 0 0 4px rgba(220,38,38,0.12); }
+}
+
+/* Emergency Full-Width Banner (.emergency-banner-112) */
+.emergency-banner-112 {
+  background: #DC2626 !important;
+  color: #FFFFFF !important;
+  border-radius: var(--radius-md);
+  padding: 1.25rem 1.5rem;
+  margin: 0.8rem 0 1.2rem;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.3);
+  border: 2px solid #B91C1C;
+  font-family: var(--font-sans);
+}
+.emergency-banner-lead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 0.6rem;
+  flex-wrap: wrap;
+}
+.emergency-banner-badge {
+  background: #FFFFFF;
+  color: #DC2626;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.emergency-banner-call {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+.emergency-banner-number {
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #FFFFFF;
+  letter-spacing: -0.02em;
+}
+.emergency-banner-text {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #FFFFFF;
+  opacity: 0.98;
+}
+
+/* Low-confidence notice (amber WCAG AA palette) */
+.low-confidence-box {
+  background: #FEF3C7;
+  color: #78350F;
+  border: 1px solid #F59E0B;
+  border-left: 4px solid #D97706;
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
   50%       { box-shadow: 0 0 0 4px rgba(220,38,38,0.12); }
 }
 
@@ -492,11 +601,11 @@ html, body, [class*="css"] {
    RESULT PANELS — section label
 ══════════════════════════════════════════════════════════ */
 .panel-section-label {
-  font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-dim);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--navy);
   margin: 1.2rem 0 0.6rem;
   padding-bottom: 0.3rem;
   border-bottom: 1px solid var(--border);
@@ -526,10 +635,10 @@ html, body, [class*="css"] {
 .diff-rank-badge {
   position: absolute;
   top: 10px; right: 10px;
-  font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.1em;
-  color: var(--text-dim);
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--navy);
   background: var(--surface3);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -564,10 +673,10 @@ html, body, [class*="css"] {
   margin-bottom: 0.5rem;
 }
 .diff-prob-label {
-  font-family: var(--mono);
-  font-size: 0.65rem;
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.02em;
 }
 .diff-prob-bar {
   flex: 1;
@@ -588,8 +697,8 @@ html, body, [class*="css"] {
   margin-top: 0.45rem;
 }
 .diff-evidence {
-  font-family: var(--mono);
-  font-size: 0.67rem;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
   color: #92400E;
   margin-top: 0.4rem;
   line-height: 1.4;
@@ -629,11 +738,11 @@ html, body, [class*="css"] {
   flex-shrink: 0;
 }
 .tc-title {
-  font-family: var(--mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--navy);
 }
 .tc-list {
   margin: 0;
@@ -666,10 +775,10 @@ html, body, [class*="css"] {
   padding: 0.9rem 1.1rem;
 }
 .redflag-title {
-  font-family: var(--mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   color: #DC2626;
   margin-bottom: 0.55rem;
   display: flex;
@@ -686,8 +795,9 @@ html, body, [class*="css"] {
 }
 .redflag-threshold {
   margin-top: 0.55rem;
-  font-family: var(--mono);
+  font-family: var(--font-sans);
   font-size: 0.75rem;
+  font-weight: 600;
   color: #DC2626;
 }
 
@@ -733,12 +843,12 @@ html, body, [class*="css"] {
   margin-top: 0.7rem;
 }
 .badge {
-  font-family: var(--mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
   padding: 3px 9px;
   border-radius: 4px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .badge-low    { background: #DCFCE7; color: #16A34A; border: 1px solid #16A34A; }
 .badge-medium { background: #FEF3C7; color: #D97706; border: 1px solid #D97706; }
@@ -752,14 +862,14 @@ html, body, [class*="css"] {
   margin-top: 0.35rem;
 }
 .source-pill {
-  font-family: var(--mono);
-  font-size: 0.63rem;
-  background: #F7FAFC;
-  border: 1px solid #CBD5E0;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  background: #FFFFFF;
+  border: 1px solid var(--border);
   border-radius: 20px;
   padding: 2px 10px;
-  color: #4A5568;
-  letter-spacing: 0.04em;
+  color: var(--navy);
+  letter-spacing: 0.02em;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -772,10 +882,11 @@ html, body, [class*="css"] {
   margin-top: 0.5rem !important;
 }
 [data-testid="stExpander"] summary {
-  font-family: var(--mono) !important;
-  font-size: 0.73rem !important;
-  letter-spacing: 0.08em !important;
-  color: var(--text-muted) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em !important;
+  color: var(--navy) !important;
   padding: 0.55rem 0.8rem !important;
 }
 [data-testid="stExpander"] summary:hover {
@@ -786,27 +897,60 @@ html, body, [class*="css"] {
 }
 
 /* ══════════════════════════════════════════════════════════
-   CHAT INPUT
+   CHAT INPUT & BOTTOM CONTAINER
 ══════════════════════════════════════════════════════════ */
+[data-testid="stBottom"],
+[data-testid="stBottomBlockContainer"] {
+  background-color: #F2F8F8 !important;
+  background: #F2F8F8 !important;
+  max-width: 820px !important;
+  margin: 0 auto !important;
+}
+[data-testid="stBottom"] > div {
+  max-width: 820px !important;
+  margin: 0 auto !important;
+  background-color: #F2F8F8 !important;
+}
 [data-testid="stChatInput"] {
-  border-top: 1px solid var(--border) !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
   padding-top: 0.8rem !important;
 }
-[data-testid="stChatInput"] textarea {
-  background: #FFFFFF !important;
-  border: 1.5px solid #CBD5E0 !important;
-  color: var(--text) !important;
-  font-family: var(--serif) !important;
-  font-size: 0.92rem !important;
-  border-radius: var(--radius-md) !important;
-  padding: 0.75rem 1rem !important;
+[data-testid="stChatInput"]:focus,
+[data-testid="stChatInput"]:focus-within {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
-[data-testid="stChatInput"] textarea:focus {
+[data-testid="stChatInput"] > div {
+  border-radius: 9999px !important;
+  border: 1px solid var(--border) !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 1px 4px rgba(6, 26, 58, 0.04) !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+[data-testid="stChatInput"] > div:focus-within {
   border-color: var(--teal) !important;
-  box-shadow: 0 0 0 3px rgba(8,145,178,0.08) !important;
+  box-shadow: 0 0 0 2px var(--teal) !important;
+  outline: none !important;
+}
+[data-testid="stChatInput"] textarea,
+[data-testid="stChatInput"] textarea:focus,
+[data-testid="stChatInput"] textarea:focus-visible {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  color: var(--text) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 0.95rem !important;
+  border-radius: 9999px !important;
+  padding: 0.75rem 1.25rem !important;
 }
 [data-testid="stChatInput"] textarea::placeholder {
-  color: #718096 !important;
+  color: var(--text-dim) !important;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -826,21 +970,21 @@ html, body, [class*="css"] {
   text-align: center;
   padding: 3.5rem 2rem;
   background: #FFFFFF;
-  border: 1px solid #CBD5E0;
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 4px rgba(6, 26, 58, 0.04);
 }
 .empty-state-icon {
   font-size: 2.5rem;
   margin-bottom: 1rem;
-  opacity: 0.6;
+  opacity: 0.8;
 }
 .empty-state-title {
-  font-family: var(--mono);
-  font-size: 0.8rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #1A202C;
+  font-family: var(--font-sans);
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--navy);
   margin-bottom: 0.5rem;
 }
 .empty-state-langs {
@@ -851,18 +995,28 @@ html, body, [class*="css"] {
   margin-top: 1rem;
 }
 .lang-chip {
-  font-family: var(--mono);
-  font-size: 0.65rem;
-  padding: 3px 10px;
-  border: 1px solid #0891B2;
-  border-radius: 20px;
-  color: #0891B2;
-  background: #CFFAFE;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  color: var(--teal-dark);
+  background: var(--surface2);
 }
 
 /* Streamlit spinner override */
 [data-testid="stSpinner"] > div {
+  border-width: 2px !important;
   border-color: var(--teal) transparent transparent !important;
+  animation-duration: 200ms !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-testid="stSpinner"] > div {
+    animation: none !important;
+    border-color: var(--teal) !important;
+    opacity: 0.7 !important;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -871,21 +1025,40 @@ html, body, [class*="css"] {
 [data-testid="stExpandSidebarButton"],
 [data-testid="stSidebarCollapseButton"] {
   visibility: visible !important;
+  position: fixed !important;
+  top: 12px !important;
+  left: 12px !important;
+  z-index: 1000001 !important;
+  width: 36px !important;
+  height: 36px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   background: var(--surface) !important;
   border: 1px solid var(--border) !important;
   border-radius: var(--radius-sm) !important;
-  color: var(--text) !important;
+  color: #061A3A !important;
+  box-shadow: 0 1px 3px rgba(6, 26, 58, 0.08) !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
 }
 [data-testid="stExpandSidebarButton"]:hover,
 [data-testid="stSidebarCollapseButton"]:hover {
-  background: var(--surface3) !important;
+  background: var(--surface2) !important;
   border-color: var(--border-hi) !important;
-  color: var(--teal) !important;
+}
+[data-testid="stExpandSidebarButton"]:focus-visible,
+[data-testid="stSidebarCollapseButton"]:focus-visible {
+  outline: 2px solid var(--teal) !important;
+  outline-offset: 2px !important;
 }
 [data-testid="stExpandSidebarButton"] svg,
 [data-testid="stSidebarCollapseButton"] svg {
-  fill: var(--text) !important;
-  stroke: var(--text) !important;
+  fill: #061A3A !important;
+  stroke: #061A3A !important;
+  color: #061A3A !important;
+  width: 18px !important;
+  height: 18px !important;
 }
 
 /* Sidebar expand/collapse arrow button (inside sidebar) */
@@ -899,13 +1072,13 @@ section[data-testid="stSidebar"] button[aria-label="Open sidebar"] {
 }
 section[data-testid="stSidebar"] button[aria-label="Close sidebar"] svg,
 section[data-testid="stSidebar"] button[aria-label="Open sidebar"] svg {
-  fill: var(--text) !important;
-  stroke: var(--text) !important;
+  fill: #061A3A !important;
+  stroke: #061A3A !important;
 }
 
 /* Ensure sidebar never has a dark overlay */
 section[data-testid="stSidebar"] {
-  background: var(--surface) !important;
+  background: var(--bg) !important;
 }
 section[data-testid="stSidebar"]::before {
   display: none !important;
@@ -925,6 +1098,9 @@ section[data-testid="stSidebar"]::before {
   [data-testid="stExpandSidebarButton"],
   [data-testid="stSidebarCollapseButton"] {
     min-height: 44px !important;
+    min-width: 44px !important;
+    width: 44px !important;
+    height: 44px !important;
   }
   [data-testid="stSidebar"] {
     max-width: 85vw !important;
@@ -956,10 +1132,10 @@ section[data-testid="stSidebar"]::before {
 # ════════════════════════════════════════════════════════════════════════════
 
 TRIAGE_META = {
-    "SELF_CARE":   {"icon": "●", "label": "SELF-CARE",    "css": "triage-SELF_CARE"},
-    "SEE_DOCTOR":  {"icon": "●", "label": "SEE A DOCTOR", "css": "triage-SEE_DOCTOR"},
-    "URGENT_CARE": {"icon": "●", "label": "URGENT CARE",  "css": "triage-URGENT_CARE"},
-    "EMERGENCY":   {"icon": "▲", "label": "EMERGENCY",    "css": "triage-EMERGENCY"},
+    "SELF_CARE":   urgency_style("SELF_CARE"),
+    "SEE_DOCTOR":  urgency_style("SEE_DOCTOR"),
+    "URGENT_CARE": urgency_style("URGENT_CARE"),
+    "EMERGENCY":   urgency_style("EMERGENCY"),
 }
 
 SOCRATES_DIMS = [
@@ -969,65 +1145,15 @@ SOCRATES_DIMS = [
 
 
 # ════════════════════════════════════════════════════════════════════════════
-#  HELPERS
-# ════════════════════════════════════════════════════════════════════════════
-
-def _prob_to_pct(prob_str) -> int:
-    """Convert HIGH/MEDIUM/LOW, '75%', 0.75, or 75 → int 0-100."""
-    _RANK_MAP = {"HIGH": 78, "MEDIUM": 48, "LOW": 22}
-    s = str(prob_str).strip().upper()
-    if s in _RANK_MAP:
-        return _RANK_MAP[s]
-    try:
-        s = s.replace('%', '')
-        f = float(s)
-        return int(f) if f > 1 else int(f * 100)
-    except Exception:
-        return 50
-
-
-def _prob_css_class(prob_str: str) -> str:
-    p = str(prob_str).strip().upper()
-    if p == "HIGH":   return "prob-high"
-    if p == "LOW":    return "prob-low"
-    return "prob-medium"
-
-
-def _prob_fill_color(prob_str: str) -> str:
-    p = str(prob_str).strip().upper()
-    if p == "HIGH":   return "#DC2626"
-    if p == "LOW":    return "#16A34A"
-    return "#D97706"
-
-
-def _prob_label_color(prob_str: str) -> str:
-    p = str(prob_str).strip().upper()
-    if p == "HIGH":   return "#DC2626"
-    if p == "LOW":    return "#16A34A"
-    return "#D97706"
-
-
-def _risk_badge_class(risk: str) -> str:
-    r = risk.upper()
-    if r == "LOW":    return "badge-low"
-    if r == "MEDIUM": return "badge-medium"
-    return "badge-high"
-
-
-# ════════════════════════════════════════════════════════════════════════════
 #  SIDEBAR
 # ════════════════════════════════════════════════════════════════════════════
 
 def render_sidebar(bot):
     with st.sidebar:
         # Brand
-        st.markdown("""
+        st.markdown(f"""
 <div class="sb-brand">
-  <div class="sb-brand-icon">🏥</div>
-  <div>
-    <div class="sb-brand-name">CARE-AI</div>
-    <div class="sb-brand-ver">v2.0 · MULTILINGUAL XAI</div>
-  </div>
+  <img src="data:image/png;base64,{_LOGO_LIGHT_B64}" class="sb-brand-logo" alt="Care-AI logo" width="180">
 </div>""", unsafe_allow_html=True)
 
         # ── Detected language — topmost prominent badge ───────
@@ -1210,7 +1336,6 @@ def render_treatment(treatment: dict):
         st.markdown(f"""
 <div class="treatment-card">
   <div class="tc-header">
-    <div class="tc-icon">🏠</div>
     <div class="tc-title">Home Care</div>
   </div>
   <ul class="tc-list">{_li(home)}</ul>
@@ -1220,7 +1345,6 @@ def render_treatment(treatment: dict):
         st.markdown(f"""
 <div class="treatment-card">
   <div class="tc-header">
-    <div class="tc-icon">🌿</div>
     <div class="tc-title">Lifestyle Tips</div>
   </div>
   <ul class="tc-list">{_li(life)}</ul>
@@ -1230,7 +1354,6 @@ def render_treatment(treatment: dict):
         st.markdown(f"""
 <div class="treatment-card full-width">
   <div class="tc-header">
-    <div class="tc-icon">🚫</div>
     <div class="tc-title">What to Avoid</div>
   </div>
   <ul class="tc-list">{_li(avoid)}</ul>
@@ -1240,8 +1363,7 @@ def render_treatment(treatment: dict):
         st.markdown(f"""
 <div class="treatment-card full-width escalation">
   <div class="tc-header">
-    <div class="tc-icon">⏱</div>
-    <div class="tc-title">Escalation Timeline</div>
+    <div class="tc-title">What to Do Next / Escalation Timeline</div>
   </div>
   <p class="tc-escalation-text">{sanitize_html(esc)}</p>
 </div>""", unsafe_allow_html=True)
@@ -1269,8 +1391,9 @@ def render_result_panels(result: dict, bot=None):
         return
 
     if result.get("low_confidence"):
-        st.warning(
-            "Low-confidence assessment: the possible conditions below are for discussion with a doctor, not a diagnosis."
+        st.markdown(
+            '<div class="low-confidence-box">⚠️ Low-confidence assessment: the possible conditions below are for discussion with a doctor, not a diagnosis.</div>',
+            unsafe_allow_html=True,
         )
 
     render_differential(result.get("differential", []))
@@ -1302,28 +1425,30 @@ def render_result_panels(result: dict, bot=None):
         st.markdown(f'<div class="mh-banner">💙 {sanitize_html(mh_msg)}</div>',
                     unsafe_allow_html=True)
 
-    # ── Reliability badge ─────────────────────────────────────
+    # ── Reliability badge (suppressed when low_confidence is True) ─
+    is_low_conf = bool(result.get("low_confidence"))
     _icon, _label, _cls = reliability_badge(
-        risk, verdict, low_confidence=bool(result.get("low_confidence"))
+        risk, verdict, low_confidence=is_low_conf
     )
 
-    st.markdown(
-        f'<div class="badge-row"><span class="badge {_cls}">{_icon} {_label}</span></div>',
-        unsafe_allow_html=True
-    )
-
-    # ── Sources ───────────────────────────────────────────────
-    if sources:
-        pills = "".join(
-            f'<span class="source-pill">{sanitize_html(s, False)}</span>' for s in sources
-        )
+    if _label != "Well-supported" or badge_visible(is_low_conf, verdict):
         st.markdown(
-            f'<div class="sources-wrap">'
-            f'<div class="panel-section-label">Sources</div>'
-            f'<div class="sources-pills">{pills}</div>'
-            f'</div>',
+            f'<div class="badge-row"><span class="badge {_cls}">{_icon} {_label}</span></div>',
             unsafe_allow_html=True
         )
+
+    # ── Sources (collapsed by default) ─────────────────────────
+    if sources:
+        with st.expander("📚 Sources & Evidence", expanded=False):
+            pills = "".join(
+                f'<span class="source-pill">{sanitize_html(s, False)}</span>' for s in sources
+            )
+            st.markdown(
+                f'<div class="sources-wrap">'
+                f'<div class="sources-pills">{pills}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
     # ── Doctor Finder panel ───────────────────────────────────
     if bot is not None:
@@ -1476,12 +1601,15 @@ def main():
     render_sidebar(bot)
 
     # ── Header ────────────────────────────────────────────────
-    col_title, col_btn = st.columns([6, 1])
+    col_title, col_btn = st.columns([3.5, 1.2])
     with col_title:
-        st.markdown("""
+        st.markdown(f"""
 <div class="main-header">
   <div class="main-header-left">
-    <div class="main-title">🏥 CARE-AI</div>
+    <div class="main-title">
+      <img src="data:image/png;base64,{_LOGO_MARK_B64}" class="main-title-mark" alt="Care-AI logo" width="32" height="32">
+      <span>CARE-AI</span>
+    </div>
     <div class="main-subtitle">
       Multilingual · XAI · Hallucination-Controlled Medical Assistant
     </div>
@@ -1528,22 +1656,37 @@ def main():
                     unsafe_allow_html=True,
                 )
         else:
-            with st.chat_message("assistant", avatar="🏥"):
+            with st.chat_message("assistant", avatar="assets/images/logo-mark_light.png"):
                 triage = msg.get("triage")
-                if triage and triage in TRIAGE_META:
-                    m = TRIAGE_META[triage]
+                res = msg.get("result") or {}
+                is_emergency = (triage == "EMERGENCY") or (res.get("type") == "emergency")
+
+                if is_emergency:
                     st.markdown(
-                        f'<div class="triage-badge triage-{triage}">'
-                        f'{m["icon"]} {m["label"]}</div>',
+                        f'<div class="emergency-banner-112">'
+                        f'<div class="emergency-banner-lead">'
+                        f'<span class="emergency-banner-badge">EMERGENCY</span>'
+                        f'<span class="emergency-banner-call">CALL <strong class="emergency-banner-number">112</strong> IMMEDIATELY</span>'
+                        f'</div>'
+                        f'<div class="emergency-banner-text">{sanitize_html(strip_rendered_emoji_prefix(msg["content"]))}</div>'
+                        f'</div>',
                         unsafe_allow_html=True,
                     )
-                st.markdown(
-                    f'<div class="bot-msg-wrap">'
-                    f'<div class="bot-avatar">🏥</div>'
-                    f'<div class="bot-bubble">{sanitize_html(msg["content"])}</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
+                else:
+                    if triage and triage in TRIAGE_META:
+                        m = TRIAGE_META[triage]
+                        st.markdown(
+                            f'<div class="triage-badge triage-{triage}">'
+                            f'{m["icon"]} {m["label"]}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    st.markdown(
+                        f'<div class="bot-msg-wrap">'
+                        f'<div class="bot-bubble">{sanitize_html(strip_rendered_emoji_prefix(msg["content"]))}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
                 if msg.get("result"):
                     render_result_panels(msg["result"], bot=bot)
 
@@ -1561,7 +1704,7 @@ def main():
         st.session_state.messages.append({"role": "user", "content": user_input})
 
         # ── Bot response ──────────────────────────────────────
-        with st.chat_message("assistant", avatar="🏥"):
+        with st.chat_message("assistant", avatar="assets/images/logo-mark_light.png"):
             tq            = TokenQueue()
             result_holder = []
 
@@ -1583,8 +1726,7 @@ def main():
                     streamed_text += token
                     stream_placeholder.markdown(
                         f'<div class="bot-msg-wrap">'
-                        f'<div class="bot-avatar">🏥</div>'
-                        f'<div class="bot-bubble">{sanitize_html(streamed_text)}▌</div>'
+                        f'<div class="bot-bubble">{sanitize_html(strip_rendered_emoji_prefix(streamed_text))}▌</div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
@@ -1596,8 +1738,7 @@ def main():
                 msg_text = result.get("message", SAFE_UNAVAILABLE_MESSAGE)
                 stream_placeholder.markdown(
                     f'<div class="bot-msg-wrap">'
-                    f'<div class="bot-avatar">🏥</div>'
-                    f'<div class="bot-bubble">{sanitize_html(msg_text)}</div>'
+                    f'<div class="bot-bubble">{sanitize_html(strip_rendered_emoji_prefix(msg_text))}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -1625,22 +1766,35 @@ def main():
 
             final_text = result.get("message", streamed_text)
             triage     = result.get("triage")
+            is_emergency = (triage == "EMERGENCY") or (result.get("type") == "emergency")
 
-            if triage and triage in TRIAGE_META:
-                m = TRIAGE_META[triage]
+            if is_emergency:
+                stream_placeholder.empty()
                 st.markdown(
-                    f'<div class="triage-badge triage-{triage}">'
-                    f'{m["icon"]} {m["label"]}</div>',
+                    f'<div class="emergency-banner-112">'
+                    f'<div class="emergency-banner-lead">'
+                    f'<span class="emergency-banner-badge">EMERGENCY</span>'
+                    f'<span class="emergency-banner-call">CALL <strong class="emergency-banner-number">112</strong> IMMEDIATELY</span>'
+                    f'</div>'
+                    f'<div class="emergency-banner-text">{sanitize_html(strip_rendered_emoji_prefix(final_text))}</div>'
+                    f'</div>',
                     unsafe_allow_html=True,
                 )
+            else:
+                if triage and triage in TRIAGE_META:
+                    m = TRIAGE_META[triage]
+                    st.markdown(
+                        f'<div class="triage-badge triage-{triage}">'
+                        f'{m["icon"]} {m["label"]}</div>',
+                        unsafe_allow_html=True,
+                    )
 
-            stream_placeholder.markdown(
-                f'<div class="bot-msg-wrap">'
-                f'<div class="bot-avatar">🏥</div>'
-                f'<div class="bot-bubble">{sanitize_html(final_text)}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
+                stream_placeholder.markdown(
+                    f'<div class="bot-msg-wrap">'
+                    f'<div class="bot-bubble">{sanitize_html(strip_rendered_emoji_prefix(final_text))}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
             render_result_panels(result, bot=bot)
 
