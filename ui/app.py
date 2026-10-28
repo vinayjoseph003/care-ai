@@ -84,7 +84,7 @@ st.set_page_config(
     page_title="Care-AI · Medical Assistant",
     page_icon="🏥",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",
 )
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -866,19 +866,24 @@ html, body, [class*="css"] {
 }
 
 /* ══════════════════════════════════════════════════════════
-   SIDEBAR COLLAPSE / EXPAND BUTTON — make it visible on light bg
+   SIDEBAR COLLAPSE / EXPAND BUTTONS — make visible on light bg
 ══════════════════════════════════════════════════════════ */
-[data-testid="collapsedControl"] {
+[data-testid="stExpandSidebarButton"],
+[data-testid="stSidebarCollapseButton"] {
+  visibility: visible !important;
   background: var(--surface) !important;
   border: 1px solid var(--border) !important;
-  border-radius: 0 var(--radius-md) var(--radius-md) 0 !important;
+  border-radius: var(--radius-sm) !important;
   color: var(--text) !important;
 }
-[data-testid="collapsedControl"]:hover {
+[data-testid="stExpandSidebarButton"]:hover,
+[data-testid="stSidebarCollapseButton"]:hover {
   background: var(--surface3) !important;
   border-color: var(--border-hi) !important;
+  color: var(--teal) !important;
 }
-[data-testid="collapsedControl"] svg {
+[data-testid="stExpandSidebarButton"] svg,
+[data-testid="stSidebarCollapseButton"] svg {
   fill: var(--text) !important;
   stroke: var(--text) !important;
 }
@@ -904,6 +909,43 @@ section[data-testid="stSidebar"] {
 }
 section[data-testid="stSidebar"]::before {
   display: none !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   RESPONSIVE MEDIA QUERIES (MOBILE)
+══════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .block-container {
+    padding: 0.8rem 1rem 6rem !important;
+  }
+  .treatment-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .stButton button,
+  [data-testid="stExpandSidebarButton"],
+  [data-testid="stSidebarCollapseButton"] {
+    min-height: 44px !important;
+  }
+  [data-testid="stSidebar"] {
+    max-width: 85vw !important;
+  }
+  /* Differential cards: stack columns vertically on mobile */
+  [data-testid="stHorizontalBlock"] {
+    flex-wrap: wrap !important;
+    gap: 0.6rem !important;
+  }
+  [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+  [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+    min-width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .user-bubble,
+  .bot-bubble {
+    max-width: 90% !important;
+  }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1097,7 +1139,8 @@ def render_sidebar(bot):
 <div class="sb-disclaimer">
   ⚠️ Care-AI provides general health information only.
   Always consult a qualified doctor before acting on this advice.
-  In an emergency, call <strong>112</strong>.
+  In an emergency, call <strong>112</strong>.<br><br>
+  Refreshing the page clears your chat (privacy).
 </div>""", unsafe_allow_html=True)
 
 
