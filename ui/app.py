@@ -206,7 +206,6 @@ html, body, [class*="css"] {
   max-width: 100%;
   height: auto;
   display: block;
-  mix-blend-mode: multiply !important;
 }
 
 /* Language badge — topmost prominent element */
@@ -404,6 +403,8 @@ div[data-testid="stColumn"] .stButton button {
   object-fit: contain;
   display: inline-block;
   vertical-align: middle;
+  background: transparent !important;
+  border: none !important;
 }
 .main-subtitle {
   font-family: var(--font-sans);
@@ -424,6 +425,16 @@ div[data-testid="stColumn"] .stButton button {
   border: none !important;
   padding: 0 !important;
   box-shadow: none !important;
+}
+[data-testid="stChatMessageAvatarAssistant"],
+[data-testid="stChatMessageAvatarUser"] {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+[data-testid="stChatMessageAvatarAssistant"] img {
+  background: transparent !important;
 }
 [data-testid="stChatMessageAvatarUser"] {
   display: none !important;
@@ -1142,7 +1153,7 @@ def render_sidebar(bot):
         # Brand
         st.markdown(f"""
 <div class="sb-brand">
-  <img src="data:image/png;base64,{_LOGO_LIGHT_B64}" class="sb-brand-logo" alt="Care-AI logo" width="180" style="mix-blend-mode: multiply;">
+  <img src="data:image/png;base64,{_LOGO_LIGHT_B64}" class="sb-brand-logo" alt="Care-AI logo" width="180">
 </div>""", unsafe_allow_html=True)
 
         # ── Detected language — topmost prominent badge ───────

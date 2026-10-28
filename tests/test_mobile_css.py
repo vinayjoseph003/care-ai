@@ -184,9 +184,9 @@ class TestMobileCSS(unittest.TestCase):
         )
 
     def test_q_sidebar_logo_mix_blend_mode(self):
-        """(q) Sidebar logo has mix-blend-mode: multiply."""
-        self.assertIn("mix-blend-mode", self.app_content)
-        self.assertIn("multiply", self.app_content)
+        """(q) Sidebar logo does NOT use mix-blend-mode (transparent RGBA logo)."""
+        self.assertNotIn("mix-blend-mode", self.app_content)
+        self.assertNotIn("multiply", self.app_content)
 
     def test_r_new_chat_button_nowrap(self):
         """(r) Button CSS has white-space: nowrap."""
