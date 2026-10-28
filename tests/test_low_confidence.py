@@ -375,6 +375,102 @@ class TestLowConfidenceMode(unittest.TestCase):
         self.assertIn("Key symptom pointing to this: runny nose", xai_user)
         self.assertNotIn("Assessment status: UNCERTAIN", xai_user)
 
+    def test_weak_context_low_confidence_triggers_and_precedence(self):
+        """
+        Verify weak context triggering and precedence rules:
+         (i) conf 75, context_coverage 'PARTIAL', sev_result {} -> low_confidence True, reason 'WEAK_CONTEXT'
+         (ii) conf 75, coverage 'NONE' -> True, 'WEAK_CONTEXT'
+         (iii) conf 75, coverage 'PARTIAL', sev_result non-empty -> False
+         (iv) conf 75, coverage 'FULL', sev_result {} -> False
+         (v) coverage key missing, sev_result {} -> False (existing tests stay green)
+         (vi) existing reasons (MISSING_CONFIDENCE, LOW_CONFIDENCE, CONDITIONS_DISAGREE) still take precedence.
+        """
+        user_message = "i feel unwell"
+        self.bot.collected_info = {"symptom_or_topic": "malaise"}
+        self.bot._check_followup = MagicMock(return_value={
+            "has_enough_info": True,
+            "diagnostic_confidence": 75,
+            "collected_info": self.bot.collected_info,
+            "followup_question": None,
+        })
+        self.bot._get_treatment_guidance = MagicMock(return_value={"home_care": ["Rest"]})
+        self.bot._get_red_flags = MagicMock(return_value={"red_flags": []})
+        self.bot._answer_streamed = MagicMock(return_value="Answer")
+
+        def _make_reasoning(conf=75, cov=None, agree=True):
+            r = {
+                "triage_level": "SEE_DOCTOR",
+                "confidence_score": conf,
+                "conditions_agree": agree,
+                "differential_diagnosis": [
+                    {
+                        "rank": 1,
+                        "condition": "General Malaise",
+                        "probability": "MODERATE",
+                        "supporting_symptoms": ["malaise"],
+                    }
+                ],
+                "specialist": "General Practitioner",
+            }
+            if cov is not None:
+                r["context_coverage"] = cov
+            return r
+
+        # (i) conf 75, context_coverage "PARTIAL", sev_result {} -> low_confidence True, reason "WEAK_CONTEXT"
+        self.bot._score_severity = MagicMock(return_value={})
+        self.bot._reason_consistent = MagicMock(return_value=_make_reasoning(75, "PARTIAL", True))
+        res_i = self.bot.chat(user_message)
+        self.assertTrue(res_i.get("low_confidence"), "(i) PARTIAL + empty severity must trigger low_confidence")
+        self.assertEqual(res_i.get("low_confidence_reason"), "WEAK_CONTEXT")
+
+        # (ii) conf 75, coverage "NONE" -> True, "WEAK_CONTEXT"
+        self.bot._score_severity = MagicMock(return_value={})
+        self.bot._reason_consistent = MagicMock(return_value=_make_reasoning(75, "NONE", True))
+        res_ii = self.bot.chat(user_message)
+        self.assertTrue(res_ii.get("low_confidence"), "(ii) NONE coverage must trigger low_confidence")
+        self.assertEqual(res_ii.get("low_confidence_reason"), "WEAK_CONTEXT")
+
+        # (iii) conf 75, coverage "PARTIAL", sev_result non-empty -> False
+        self.bot._score_severity = MagicMock(return_value={"severity_level": "LOW", "scored_symptoms": ["cough"]})
+        self.bot._reason_consistent = MagicMock(return_value=_make_reasoning(75, "PARTIAL", True))
+        res_iii = self.bot.chat(user_message)
+        self.assertFalse(res_iii.get("low_confidence"), "(iii) PARTIAL with non-empty severity must be False")
+        self.assertIsNone(res_iii.get("low_confidence_reason"))
+
+        # (iv) conf 75, coverage "FULL", sev_result {} -> False
+        self.bot._score_severity = MagicMock(return_value={})
+        self.bot._reason_consistent = MagicMock(return_value=_make_reasoning(75, "FULL", True))
+        res_iv = self.bot.chat(user_message)
+        self.assertFalse(res_iv.get("low_confidence"), "(iv) FULL coverage with empty severity must be False")
+        self.assertIsNone(res_iv.get("low_confidence_reason"))
+
+        # (v) coverage key missing, sev_result {} -> False
+        self.bot._score_severity = MagicMock(return_value={})
+        self.bot._reason_consistent = MagicMock(return_value=_make_reasoning(75, None, True))
+        res_v = self.bot.chat(user_message)
+        self.assertFalse(res_v.get("low_confidence"), "(v) Missing coverage key must be False")
+        self.assertIsNone(res_v.get("low_confidence_reason"))
+
+        # (vi) existing reasons take precedence over WEAK_CONTEXT
+        # 1. MISSING_CONFIDENCE takes precedence over WEAK_CONTEXT
+        self.bot._score_severity = MagicMock(return_value={})
+        self.bot._reason_consistent = MagicMock(return_value=_make_reasoning(None, "NONE", True))
+        res_vi_1 = self.bot.chat(user_message)
+        self.assertTrue(res_vi_1.get("low_confidence"))
+        self.assertEqual(res_vi_1.get("low_confidence_reason"), "MISSING_CONFIDENCE")
+
+        # 2. LOW_CONFIDENCE (<50) takes precedence over WEAK_CONTEXT
+        self.bot._reason_consistent = MagicMock(return_value=_make_reasoning(35, "NONE", True))
+        res_vi_2 = self.bot.chat(user_message)
+        self.assertTrue(res_vi_2.get("low_confidence"))
+        self.assertEqual(res_vi_2.get("low_confidence_reason"), "LOW_CONFIDENCE")
+
+        # 3. CONDITIONS_DISAGREE takes precedence over WEAK_CONTEXT
+        self.bot._reason_consistent = MagicMock(return_value=_make_reasoning(75, "NONE", False))
+        res_vi_3 = self.bot.chat(user_message)
+        self.assertTrue(res_vi_3.get("low_confidence"))
+        self.assertEqual(res_vi_3.get("low_confidence_reason"), "CONDITIONS_DISAGREE")
+
 
 if __name__ == "__main__":
     unittest.main()
