@@ -84,20 +84,110 @@ EMERGENCY_KEYWORDS = [
 
 _SHARED_RESOURCES = {"router", "model", "vs", "scorer", "precaution_map"}
 
-SAFE_UNAVAILABLE_MESSAGE = (
-    "I apologize, but I cannot assess your symptoms right now because our clinical "
-    "assessment services are temporarily unavailable.\n\n"
-    "EMERGENCY GUIDANCE:\n"
-    "If you are experiencing any of the following emergency symptoms, please call 112 "
-    "(or your local emergency number) immediately or go to the nearest emergency room:\n"
-    "  - Chest pain\n"
-    "  - Trouble breathing\n"
-    "  - Severe bleeding\n"
-    "  - Fainting\n"
-    "  - Seizure\n"
-    "  - Thoughts of self-harm\n\n"
-    "Otherwise, please try again later or see a doctor."
-)
+# Not native-speaker or clinician reviewed.
+EMERGENCY_MESSAGES = {
+    "en": (
+        "MEDICAL EMERGENCY DETECTED\n\n"
+        "Please call 112 (India's emergency number) IMMEDIATELY\n"
+        "or go to the nearest emergency room. In many states you can also call 108 for an ambulance. Do not wait.\n\n"
+        "Your safety is the top priority right now."
+    ),
+    "hi": (
+        "चिकित्सा आपातकाल का पता चला\n\n"
+        "कृपया तुरंत 112 पर कॉल करें (भारत का आपातकालीन नंबर) या नज़दीकी अस्पताल के आपातकालीन कक्ष में जाएँ। कई राज्यों में एम्बुलेंस के लिए 108 पर भी कॉल कर सकते हैं। इंतज़ार न करें।\n\n"
+        "इस समय आपकी सुरक्षा सबसे ज़रूरी है।"
+    ),
+    "te": (
+        "వైద్య అత్యవసర పరిస్థితి గుర్తించబడింది\n\n"
+        "దయచేసి వెంటనే 112కు కాల్ చేయండి (భారతదేశ అత్యవసర నంబర్) లేదా సమీపంలోని ఆసుపత్రి అత్యవసర విభాగానికి వెళ్లండి. చాలా రాష్ట్రాలలో అంబులెన్స్ కోసం 108కు కూడా కాల్ చేయవచ్చు. వేచి ఉండకండి.\n\n"
+        "ఇప్పుడు మీ భద్రతే అత్యంత ముఖ్యం."
+    ),
+    "ta": (
+        "மருத்துவ அவசர நிலை கண்டறியப்பட்டது\n\n"
+        "தயவுசெய்து உடனடியாக 112 எண்ணை அழைக்கவும் (இந்தியாவின் அவசர எண்) அல்லது அருகிலுள்ள மருத்துவமனையின் அவசர சிகிச்சைப் பிரிவுக்குச் செல்லவும். பல மாநிலங்களில் ஆம்புலன்ஸுக்கு 108 எண்ணையும் அழைக்கலாம். காத்திருக்க வேண்டாம்.\n\n"
+        "இப்போது உங்கள் பாதுகாப்பே மிக முக்கியம்."
+    ),
+}
+
+# Not native-speaker or clinician reviewed.
+UNAVAILABLE_MESSAGES = {
+    "en": (
+        "I apologize, but I cannot assess your symptoms right now because our clinical "
+        "assessment services are temporarily unavailable.\n\n"
+        "EMERGENCY GUIDANCE:\n"
+        "If you are experiencing any of the following emergency symptoms, please call 112 "
+        "(or your local emergency number) immediately or go to the nearest emergency room:\n"
+        "  - Chest pain\n"
+        "  - Trouble breathing\n"
+        "  - Severe bleeding\n"
+        "  - Fainting\n"
+        "  - Seizure\n"
+        "  - Thoughts of self-harm\n\n"
+        "Otherwise, please try again later or see a doctor."
+    ),
+    "hi": (
+        "क्षमा करें, हमारी चिकित्सा आकलन सेवाएँ अभी अस्थायी रूप से उपलब्ध नहीं हैं, इसलिए आपके लक्षणों का आकलन अभी नहीं किया जा सकता।\n\n"
+        "आपातकालीन मार्गदर्शन:\n"
+        "यदि आपको इनमें से कोई भी लक्षण हो, तो तुरंत 112 पर कॉल करें (या अपना स्थानीय आपातकालीन नंबर) या नज़दीकी आपातकालीन कक्ष में जाएँ:\n"
+        "  - सीने में दर्द\n"
+        "  - सांस लेने में तकलीफ़\n"
+        "  - बहुत ज़्यादा खून बहना\n"
+        "  - बेहोशी\n"
+        "  - दौरा पड़ना\n"
+        "  - खुद को नुकसान पहुँचाने के विचार\n\n"
+        "अन्यथा कृपया बाद में दोबारा कोशिश करें या डॉक्टर से मिलें।"
+    ),
+    "te": (
+        "క్షమించండి, మా వైద్య అంచనా సేవలు ప్రస్తుతం తాత్కాలికంగా అందుబాటులో లేవు, కాబట్టి ఇప్పుడు మీ లక్షణాలను అంచనా వేయలేము.\n\n"
+        "అత్యవసర మార్గదర్శకం:\n"
+        "మీకు ఈ క్రింది లక్షణాలలో ఏవైనా ఉంటే, వెంటనే 112కు కాల్ చేయండి (లేదా మీ స్థానిక అత్యవసర నంబర్) లేదా సమీప అత్యవసర విభాగానికి వెళ్లండి:\n"
+        "  - ఛాతీ నొప్పి\n"
+        "  - శ్వాస తీసుకోవడంలో ఇబ్బంది\n"
+        "  - తీవ్రమైన రక్తస్రావం\n"
+        "  - మూర్ఛపోవడం\n"
+        "  - ఫిట్స్ (మూర్ఛ)\n"
+        "  - తనకు తాను హాని చేసుకోవాలనే ఆలోచనలు\n\n"
+        "లేకపోతే, దయచేసి తర్వాత మళ్లీ ప్రయత్నించండి లేదా డాక్టర్ను కలవండి."
+    ),
+    "ta": (
+        "மன்னிக்கவும், எங்கள் மருத்துவ மதிப்பீட்டுச் சேவைகள் தற்போது தற்காலிகமாகக் கிடைக்கவில்லை, எனவே இப்போது உங்கள் அறிகுறிகளை மதிப்பிட இயலாது.\n\n"
+        "அவசர வழிகாட்டுதல்:\n"
+        "பின்வரும் அறிகுறிகளில் ஏதேனும் இருந்தால், உடனடியாக 112 எண்ணை அழைக்கவும் (அல்லது உங்கள் உள்ளூர் அவசர எண்) அல்லது அருகிலுள்ள அவசர சிகிச்சைப் பிரிவுக்குச் செல்லவும்:\n"
+        "  - நெஞ்சு வலி\n"
+        "  - மூச்சுவிடுவதில் சிரமம்\n"
+        "  - கடுமையான இரத்தப்போக்கு\n"
+        "  - மயக்கம்\n"
+        "  - வலிப்பு\n"
+        "  - தன்னைத்தானே காயப்படுத்தும் எண்ணங்கள்\n\n"
+        "இல்லையெனில், தயவுசெய்து பின்னர் மீண்டும் முயற்சிக்கவும் அல்லது மருத்துவரைச் சந்திக்கவும்."
+    ),
+}
+
+SAFE_UNAVAILABLE_MESSAGE = UNAVAILABLE_MESSAGES["en"]
+
+
+def safety_lang(user_message: str | None = None, user_language_code: str | None = None) -> str:
+    """
+    Determine safety message language ("hi", "te", "ta", "en").
+    First checks the script of the current message:
+      - Devanagari (U+0900 - U+097F) -> "hi"
+      - Telugu     (U+0C00 - U+0C7F) -> "te"
+      - Tamil      (U+0B80 - U+0BFF) -> "ta"
+    If no matching script in user_message, falls back to user_language_code if in ("hi", "te", "ta").
+    Defaults to "en".
+    """
+    if user_message:
+        for ch in user_message:
+            code_pt = ord(ch)
+            if 0x0900 <= code_pt <= 0x097F:
+                return "hi"
+            if 0x0C00 <= code_pt <= 0x0C7F:
+                return "te"
+            if 0x0B80 <= code_pt <= 0x0BFF:
+                return "ta"
+    if user_language_code in ("hi", "te", "ta"):
+        return user_language_code
+    return "en"
 
 MENTAL_HEALTH_CONDITIONS = {
     "depression", "anxiety", "stress", "panic", "ptsd", "bipolar",
@@ -409,13 +499,10 @@ class CareAI:
     def _is_emergency(self, msg):
         return check_red_flags(msg)["emergency"]
 
-    def _emergency_msg(self):
-        return (
-            "MEDICAL EMERGENCY DETECTED\n\n"
-            "Please call 112 (India's emergency number) IMMEDIATELY\n"
-            "or go to the nearest emergency room. In many states you can also call 108 for an ambulance. Do not wait.\n\n"
-            "Your safety is the top priority right now."
-        )
+    def _emergency_msg(self, user_message: str | None = None) -> str:
+        code = (self.user_language or {}).get("code", "en")
+        lang = safety_lang(user_message, code)
+        return EMERGENCY_MESSAGES.get(lang, EMERGENCY_MESSAGES["en"])
 
     def _is_resolved(self, msg: str) -> bool:
         """Return True if user is saying their symptoms have resolved / they are better."""
@@ -1498,7 +1585,7 @@ class CareAI:
 
         # ── Emergency check (local, instant — no API call) ────
         if self._is_emergency(user_message):
-            msg = self._emergency_msg()
+            msg = self._emergency_msg(user_message)
             self._add_turn("user",      user_message)
             self._add_turn("assistant", msg)
             return {"type": "emergency", "message": msg}
@@ -1517,9 +1604,11 @@ class CareAI:
                 setattr(self, k, v)
             for k in current_keys - set(snapshot.keys()) - _SHARED_RESOURCES:
                 delattr(self, k)
+            code = (self.user_language or {}).get("code", "en")
+            outage_lang = safety_lang(user_message, code)
             return {
                 "type":    "service_unavailable",
-                "message": SAFE_UNAVAILABLE_MESSAGE,
+                "message": UNAVAILABLE_MESSAGES.get(outage_lang, SAFE_UNAVAILABLE_MESSAGE),
             }
 
     def _chat_pipeline(self, user_message: str) -> dict:
