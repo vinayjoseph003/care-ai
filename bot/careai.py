@@ -259,6 +259,23 @@ When giving a clinical assessment:
 """
 
 
+def is_english_chunk(chunk: dict) -> bool:
+    """
+    Return True if chunk is in English, False if identified as Spanish.
+    Excludes a chunk if its language field says Spanish or its URL contains '/spanish/'.
+    MedQuAD, NHS, ICD-10, and CSV chunks are unaffected.
+    """
+    if not isinstance(chunk, dict):
+        return False
+    lang = str(chunk.get("language", "")).strip().lower()
+    if lang == "spanish" or lang.startswith("es") or "spanish" in lang:
+        return False
+    url = str(chunk.get("url", "")).lower()
+    if "/spanish/" in url:
+        return False
+    return True
+
+
 class CareAI:
     def __init__(self, knowledge_chunks: list = None, severity_map: dict = None,
                  router_config: dict = None, precaution_map: dict = None,
@@ -874,11 +891,12 @@ class CareAI:
                     parts.append(str(val))
 
         query        = " ".join(parts)
-        text_results = self.vs.search(query, k=k, query_category=query_category)
+        fetch_k      = max(k * 3, k + 10)
+        text_results = self.vs.search(query, k=fetch_k, query_category=query_category)
         extracted    = self.scorer.extract_symptoms_from_text(query)
         if extracted:
             sym_results = self.vs.search_by_symptoms(
-                extracted, k=k, query_category=query_category, full_query=query
+                extracted, k=fetch_k, query_category=query_category, full_query=query
             )
             seen_ids = set()
             merged = []
@@ -886,22 +904,25 @@ class CareAI:
             for i in range(max_len):
                 if i < len(sym_results):
                     doc = sym_results[i]
-                    doc_id = doc.get('id') or doc.get('text', '')[:40]
-                    if doc_id not in seen_ids:
-                        seen_ids.add(doc_id)
-                        merged.append(doc)
-                        if len(merged) == k:
-                            break
+                    if is_english_chunk(doc):
+                        doc_id = doc.get('id') or doc.get('text', '')[:40]
+                        if doc_id not in seen_ids:
+                            seen_ids.add(doc_id)
+                            merged.append(doc)
+                            if len(merged) == k:
+                                break
                 if i < len(text_results):
                     doc = text_results[i]
-                    doc_id = doc.get('id') or doc.get('text', '')[:40]
-                    if doc_id not in seen_ids:
-                        seen_ids.add(doc_id)
-                        merged.append(doc)
-                        if len(merged) == k:
-                            break
+                    if is_english_chunk(doc):
+                        doc_id = doc.get('id') or doc.get('text', '')[:40]
+                        if doc_id not in seen_ids:
+                            seen_ids.add(doc_id)
+                            merged.append(doc)
+                            if len(merged) == k:
+                                break
             return merged
-        return text_results[:k]
+        filtered = [doc for doc in text_results if is_english_chunk(doc)]
+        return filtered[:k]
 
     def _fmt_context(self, chunks):
         if not chunks:
