@@ -105,6 +105,7 @@ Return ONLY JSON:
 {
   "has_enough_info": true or false,
   "diagnostic_confidence": 0-100,
+  "english_summary": "Short 1-2 sentence English clinical summary of the user's complaint and symptoms (always in English regardless of user's language)",
   "collected_info": {
     "symptom_or_topic": "main complaint",
     "site": "location if known, else null",
