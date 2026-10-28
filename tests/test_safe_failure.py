@@ -164,6 +164,26 @@ class TestSafeFailure(unittest.TestCase):
             self.mock_router.complete.assert_not_called()
             self.mock_router.stream.assert_not_called()
 
+    def test_emergency_message_112_first_formatting(self):
+        """
+        Verify emergency message formatting:
+         (a) _emergency_msg() contains "112".
+         (b) "911" and "999" do NOT appear in it.
+         (c) "MEDICAL EMERGENCY DETECTED" still present.
+         (d) "108" appears after "112".
+        """
+        msg = self.bot._emergency_msg()
+        # (a)
+        self.assertIn("112", msg)
+        # (b)
+        self.assertNotIn("911", msg)
+        self.assertNotIn("999", msg)
+        # (c)
+        self.assertIn("MEDICAL EMERGENCY DETECTED", msg)
+        # (d)
+        self.assertIn("108", msg)
+        self.assertTrue(msg.index("112") < msg.index("108"), "'108' must appear after '112'")
+
     def test_session_state_is_deepcopyable(self):
         """copy.deepcopy every non-shared attribute of a fresh CareAI and assert no exception."""
         bot = CareAI(
