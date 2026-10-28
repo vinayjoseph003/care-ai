@@ -10,6 +10,7 @@
 import html
 import streamlit as st
 import urllib.parse
+from ui.helpers import format_specialist_heading
 
 try:
     from streamlit_js_eval import get_geolocation
@@ -46,12 +47,11 @@ _CSS = """
     flex-shrink: 0;
 }
 .df-section-title {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.72rem;
+    font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+    font-size: 0.85rem;
     font-weight: 600;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: #0891B2;
+    letter-spacing: normal;
+    color: #06695C;
 }
 .df-section-sub {
     font-family: 'Source Serif 4', Georgia, serif;
@@ -360,11 +360,11 @@ def render_doctor_finder(bot, response: dict):
 <div class="df-section">
   <div class="df-section-header">
     <div class="df-section-icon">🏥</div>
-    <div class="df-section-title">Nearby {specialist}s</div>
+    <div class="df-section-title">Nearby {format_specialist_heading(specialist)}</div>
   </div>
   <div class="df-section-sub">
     Based on your symptoms, we recommend seeing a <strong
-    style="color:#1A202C">{specialist}</strong>.
+    style="color:#1A202C">{format_specialist_heading(specialist)}</strong>.
     Find verified facilities near you — tap any card to open on the map.
   </div>
 </div>
@@ -456,7 +456,7 @@ def render_doctor_finder(bot, response: dict):
         lat = st.session_state.get("df_lat")
         lon = st.session_state.get("df_lon")
         if lat and lon:
-            with st.spinner(f"Finding nearby {specialist}s…"):
+            with st.spinner(f"Finding Nearby {format_specialist_heading(specialist)}…"):
                 result = bot.find_nearby_doctors(lat, lon)
             st.session_state[RESULTS] = result
             st.session_state[STATE]   = "done"
@@ -493,7 +493,7 @@ def render_doctor_finder(bot, response: dict):
             )
         else:
             st.markdown(
-                f'<div class="df-alert">No {specialist}s found within '
+                f'<div class="df-alert">No {format_specialist_heading(specialist)} found within '
                 f'{radius_km} km of your location.</div>',
                 unsafe_allow_html=True,
             )
