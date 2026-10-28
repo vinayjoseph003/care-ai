@@ -50,6 +50,7 @@ from enum import Enum
 from core.llm_router import LLMRouter, AllProvidersFailedError, StreamInterruptedError
 from core.doctor_finder import find_nearby_doctors
 from core.red_flags import check_red_flags
+from core.text_safety import normalize_emergency_numbers
 from core import (
     VectorStore, SymptomScorer,
     LANG_DETECT_PROMPT, FOLLOWUP_PROMPT, REASONING_PROMPT,
@@ -1618,7 +1619,17 @@ class CareAI:
         }
 
         try:
-            return self._chat_pipeline(user_message)
+            result = self._chat_pipeline(user_message)
+            clean_res = copy.copy(result)
+            if "message" in clean_res:
+                clean_res["message"] = normalize_emergency_numbers(clean_res["message"])
+            if "treatment" in clean_res:
+                clean_res["treatment"] = normalize_emergency_numbers(clean_res["treatment"])
+            if "red_flags" in clean_res:
+                clean_res["red_flags"] = normalize_emergency_numbers(clean_res["red_flags"])
+            if "xai_explanation" in clean_res:
+                clean_res["xai_explanation"] = normalize_emergency_numbers(clean_res["xai_explanation"])
+            return clean_res
         except (AllProvidersFailedError, StreamInterruptedError):
             current_keys = set(vars(self).keys())
             for k, v in snapshot.items():
