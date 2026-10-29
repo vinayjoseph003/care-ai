@@ -1294,7 +1294,7 @@ class CareAI:
         claim_checks  = fc.get("claim_checks", [])
         if claim_checks:
             total      = len(claim_checks)
-            unsupported = sum(1 for c in claim_checks if not c.get("supported", True))
+            unsupported = sum(1 for c in claim_checks if not (isinstance(c, dict) and c.get("supported") is True))
             ratio       = unsupported / total
 
             if ratio == 0:
@@ -1312,7 +1312,8 @@ class CareAI:
 
             if computed_risk in ("MEDIUM", "HIGH") and not fc.get("corrected_answer"):
                 verified_sentences = [
-                    c["claim"] for c in claim_checks if c.get("supported", False)
+                    c.get("claim", "") for c in claim_checks
+                    if isinstance(c, dict) and c.get("supported") is True and c.get("claim")
                 ]
                 if len(verified_sentences) >= 2:
                     join_prompt = (
@@ -1343,11 +1344,14 @@ class CareAI:
 
             if not fc.get("verified_claims"):
                 fc["verified_claims"] = [
-                    c["claim"] for c in claim_checks if c.get("supported", False)
+                    c.get("claim", "") for c in claim_checks
+                    if isinstance(c, dict) and c.get("supported") is True and c.get("claim")
                 ]
             if not fc.get("unsupported_claims"):
                 fc["unsupported_claims"] = [
-                    c["claim"] for c in claim_checks if not c.get("supported", True)
+                    c.get("claim", str(c)) if isinstance(c, dict) else str(c)
+                    for c in claim_checks
+                    if not (isinstance(c, dict) and c.get("supported") is True)
                 ]
 
         return fc
@@ -1899,7 +1903,7 @@ class CareAI:
         print("  Claim-level fact-checking...", end=" ", flush=True)
         fc = self._factcheck(answer, context_str)
         checks     = fc.get("claim_checks", [])
-        n_verified = sum(1 for c in checks if c.get("supported", False))
+        n_verified = sum(1 for c in checks if isinstance(c, dict) and c.get("supported") is True)
         n_total    = len(checks)
         risk       = fc.get("hallucination_risk", "N/A")
         print(f"done ({n_verified}/{n_total} claims verified | Risk: {risk})")
