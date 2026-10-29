@@ -167,8 +167,9 @@ NEUROLOGICAL EMERGENCY RULES — CHECK FIRST (before activity rule):
 ACTIVITY-TRIGGERED PAIN RULE — CHECK FIRST (for musculoskeletal complaints):
 If collected SOCRATES data contains trigger_activity mentioning exercise, workout, gym,
 lifting, sport, running, or any physical exertion:
-- Rank 1 MUST be a musculoskeletal condition (muscle strain, DOMS, muscle pull, hernia).
-- This overrides all other ranking logic.
+- EXCEPTIONS: do NOT force a musculoskeletal rank 1 for chest, abdominal, pelvic or groin pain, or when red flags (fever, vomiting, shortness of breath, radiating pain) are present; evaluate visceral and urgent causes first.
+- Otherwise, Rank 1 MUST be a musculoskeletal condition (muscle strain, DOMS, muscle pull, hernia).
+- This overrides all other ranking logic for musculoskeletal complaints.
 - Key evidence must reference the specific activity mentioned.
 - Description must explain the link between the activity and the pain.
 
@@ -234,7 +235,7 @@ Return ONLY JSON:
       "against": []
     }
   ],
-  "reasoning_trace": "2-3 sentences: how symptoms + trigger_activity together point to top diagnosis. If trigger_activity mentions exercise/workout/lifting → muscle strain or DOMS must be rank 1.",
+  "reasoning_trace": "2-3 sentences: how symptoms + trigger_activity together point to top diagnosis. If trigger_activity mentions exercise/workout/lifting → muscle strain or DOMS must be rank 1 (do NOT force a musculoskeletal rank 1 for chest, abdominal, pelvic or groin pain, or when red flags are present; evaluate visceral and urgent causes first).",
   "knowledge_sources": ["sources from retrieved context only"],
   "confidence_score": 0-100,
   "confidence_explanation": "Why this confidence level in plain language",
