@@ -38,8 +38,8 @@
 - [Multi-Provider LLM Routing & Resilience](#multi-provider-llm-routing--resilience)
 - [Knowledge Base & Ingestion Pipeline](#knowledge-base--ingestion-pipeline)
 - [Engineering Improvements](#engineering-improvements)
-- [Empirical Evaluation](#empirical-evaluation)
-- [Local Performance Benchmarks](#local-performance-benchmarks)
+- [Evaluation Integrity Notice](#evaluation-integrity-notice)
+- [Workflow Latency Characteristics](#workflow-latency-characteristics)
 - [Quick Start](#quick-start)
 - [CLI Reference](#cli-reference)
 - [Verification & Automated Testing](#verification--automated-testing)
@@ -85,9 +85,9 @@ The hosted demonstration of Care-AI is accessible on Streamlit Community Cloud:
 | Feature | Technical Implementation | Verified Capability |
 |---|---|---|
 | **Multilingual Interaction** | Language identification pass with strict cross-prompt target-language constraints | Automatically recognizes input languages (English, Telugu, Hindi, and others) and maintains consistent target-language output across all triage passes. |
-| **Sparse Vector RAG** | SciPy CSR sparse TF-IDF index over 37,233 chunks with category blocklists and query routing | Performs rapid retrieval (~4–5 ms locally) across 5 authoritative medical sources, enforcing relevance filtering (`RELEVANCE_THRESHOLD = 0.10`). |
+| **Sparse Vector RAG** | SciPy CSR sparse TF-IDF index over 37,233 chunks with category blocklists and query routing | Performs sparse vector retrieval across 5 authoritative medical sources, enforcing relevance filtering (`RELEVANCE_THRESHOLD = 0.10`). |
 | **Explainable AI (XAI)** | Dual-pass structured generation: *Cause → Reasoning → Recommendation* | Grounds each response in referenced literature (`MedQuAD`, `MedlinePlus`, `ICD-10-CM`, `NHS`), displaying explicit source provenance for transparent inspection. |
-| **Four-Tier Symptom Triage** | Weighted mathematical severity aggregation + differential LLM consensus | Stratifies risk into `SELF_CARE`, `SEE_DOCTOR`, `URGENT_CARE`, or `EMERGENCY`. Implements a zero under-triage safety heuristic for emergency presentations. |
+| **Four-Tier Symptom Triage** | Weighted mathematical severity aggregation + differential LLM consensus | Stratifies risk into `SELF_CARE`, `SEE_DOCTOR`, `URGENT_CARE`, or `EMERGENCY`. Implements deterministic red-flag escalation and conservative triage floors to minimize under-triage risk for emergency presentations. |
 | **SOCRATES Intake Engine** | Confidence-threshold conversational state machine (`ConvState`) | Replaces rigid turn limits with adaptive follow-up questions; stops when sufficient clinical detail is collected or when vague user input is identified. |
 | **Doctor & Specialist Finder** | Geolocation + OpenStreetMap (Nominatim/Overpass) specialist mapping | Automatically recommends relevant medical specialties (e.g., Cardiologist, Pulmonologist, Neurologist) and queries nearby medical facilities. |
 | **Multi-Provider LLM Router** | Sticky priority router across Gemini, OpenRouter, Groq, and local Ollama | Bounded timeouts, non-blocking failover on 429/503 errors, safe response parsing, and native Server-Sent Events (SSE) token streaming. |
@@ -164,7 +164,7 @@ High availability is essential for healthcare assistants. Care-AI incorporates a
 
 | Priority | Provider | Verified Model Candidate | Primary Use Case | Failover Trigger |
 |:---:|---|---|---|---|
-| **1** | **Google Gemini** | `gemini-3.5-flash-lite` | Primary generation; rapid multi-pass turn synthesis (~2.3s intake) | HTTP 429, daily quota exhaustion, API downtime |
+| **1** | **Google Gemini** | `gemini-3.5-flash-lite` | Primary generation; multi-pass turn synthesis | HTTP 429, daily quota exhaustion, API downtime |
 | **2** | **OpenRouter** | `meta-llama/llama-3.3-70b-instruct` | High-fidelity secondary fallback; deep clinical reasoning | Rate limiting, token cap exhaustion, network timeout |
 | **3** | **Groq Cloud** | `llama-3.3-70b-versatile` | Ultra-fast tertiary cloud fallback | Quota depletion, provider error |
 | **4** | **Ollama** | `qwen2.5:7b` (or configured) | Offline / on-premise local fallback (`localhost:11434`) | Offline daemon, port unreachable (0.8s timeout) |
@@ -199,10 +199,9 @@ The Care-AI codebase has undergone extensive structural and operational hardenin
 ### 1. SciPy CSR Sparse Vector Store Optimization
 - **The Problem**: Early iterations stored the TF-IDF representation as an uncompressed dense NumPy matrix, generating a **5.08 GB** index file (`cache/vector_index.pkl`) that exceeded container memory limits and caused frequent Out-Of-Memory (OOM) termination on Streamlit Cloud.
 - **The Engineering Solution**: Re-engineered `core/vector_store.py` to construct and serialize compressed sparse rows using `scipy.sparse.csr_matrix` (`cache/vector_index_v2.pkl`).
-- **Empirical Storage & Latency Gains (Local Benchmark Under Python 3.12 on Windows)**:
-  - **Disk Footprint**: Reduced from **5.08 GB** to **26.14 MB** (a **99.5% reduction** in storage).
-  - **Index Deserialization**: Versioned sparse cache reloads in **~25 ms** (versus multi-second dense deserialization).
-  - **Search Latency**: Query retrieval runs in **~4–5 ms** across all 37,233 chunks.
+- **Storage & Memory Efficiency**:
+  - **Disk Footprint**: Serialized sparse CSR format occupies **26.14 MiB (27.41 MB)** on disk (`cache/vector_index_v2.pkl`), eliminating the uncompressed dense matrix format that caused container out-of-memory crashes.
+  - **Sparse Matrix Representation**: Directly queries 37,233 document vectors using SciPy CSR matrix multiplication without expanding into dense memory arrays.
   - **OOM Defense**: Implemented an automated file-size safeguard that immediately rejects legacy cache files over 500 MB without deserialization.
 
 ### 2. Multi-Provider Router Hardening
@@ -221,58 +220,25 @@ The Care-AI codebase has undergone extensive structural and operational hardenin
 
 ---
 
-## Empirical Evaluation
+## Evaluation Integrity Notice
 
-Care-AI's triage and reasoning pipeline was evaluated across **30 representative clinical benchmark cases** encompassing common primary care presentations, acute neurological red flags, and emergent cardiac events.
-
-> [!WARNING]
-> **Evaluation Scope & Preliminary Status**<br>
-> The figures below represent project-reported preliminary research results across a curated 30-case test battery. They are presented for academic assessment and do not represent formal clinical validation, multi-center trials, or statistical safety proof across diverse patient demographics.
-
-### Table I: Per-Category Clinical Performance (N=30)
-
-| Category | N | Triage Accuracy | Language Accuracy | Hallucination Pass Rate | Under-Triage Incidents | Explainability Score | Mean Response Time (s) |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Common / Low Triage** | 15 | **100.0%** | 100.0% | 80.0% | 0 | 66.7% | 48.2s |
-| **Neurological Red Flags** | 8 | 87.5% | 100.0% | 62.5% | 1 | 75.0% | 74.3s |
-| **Cardiac Red Flags** | 7 | 85.7% | 85.7% | 57.1% | 0 | 71.4% | 61.8s |
-| **Overall Battery** | **30** | **86.0%** | **92.0%** | **66.7%** | **1** | **71.0%** | **60.5s** |
-
-### Table II: Triage Classification Metrics
-
-| Triage Stratum | Precision | Recall | F1-Score | Support |
-|---|:---:|:---:|:---:|:---:|
-| **SELF_CARE** | 0.93 | 0.87 | 0.90 | 12 |
-| **SEE_DOCTOR** | 0.85 | 0.89 | 0.87 | 9 |
-| **URGENT_CARE** | 0.50 | 0.50 | 0.50 | 2 |
-| **EMERGENCY** | 0.92 | **1.00** | **0.96** | 7 |
-| **Macro Average** | 0.80 | 0.82 | 0.81 | 30 |
-| **Weighted Average** | — | — | **0.88** | 30 |
-
-### Table III: System Reliability & Explainability
-
-| Metric | Measured Value | Operational Significance |
-|---|:---:|---|
-| **Primary Provider Success Rate** | **96.7%** | Proportion of diagnostic turns completed without fallback activation |
-| **Fallback Success Rate** | **100.0%** | Successful completion rate upon failover to secondary cloud providers |
-| **Emergency Triage Recall** | **1.00 (7/7)** | Zero under-triage across all severe emergency test presentations |
-| **Total Under-Triage Cases** | **1 / 30** | Single conservative under-escalation observed in atypical neurological presentation |
-| **Mean Explainability Score** | **2.38 / 3.0** | Independent human rating of *Cause → Reasoning → Recommendation* clarity |
+> [!CAUTION]
+> **Withdrawal of Historical Evaluation Figures & Clinical Notice**
+>
+> 1. **Incomplete Benchmark**: An intended 100-case automated evaluation was halted due to upstream cloud LLM API rate limits. Summary evaluation figures were subsequently synthesized rather than computed from a complete, reproducible 100-case dataset.
+> 2. **Withdrawn Performance Claims**: All historical evaluation metrics previously reported (including triage accuracy, language accuracy, explainability scores, provider success rates, and claims of zero under-triage or perfect emergency recall) are **formally withdrawn** and must not be treated as validated results, operational guarantees, or performance measurements.
+> 3. **No Clinical Validation**: Care-AI is an experimental academic prototype developed for preliminary symptom triage exploration and technical research. It has **not** undergone clinical trials, multi-center studies, or regulatory validation.
+> 4. **Audit Documentation**: Detailed findings of the evaluation-integrity audit, artifact inventory, and documentation of discrepancies across retained files are recorded in [eval/README.md](eval/README.md). Raw historical evaluation artifacts are preserved in the eval/ directory strictly for archival and provenance transparency.
 
 ---
 
-## Local Performance Benchmarks
+## Workflow Latency Characteristics
 
-Inference latency varies based on whether a turn requires single-turn conversational intake or full-pipeline clinical assessment (which executes differential analysis, red-flag scanning, claim-level fact-checking, and XAI formatting).
+Interaction duration varies based on whether a turn requires conversational intake or full clinical assessment:
+- **Follow-up Intake Turn**: Executes a single conversational intake evaluation (ConvState transition) without triggering vector retrieval or multi-pass reasoning.
+- **Full Clinical Assessment**: Executes multi-pass differential analysis, RAG context retrieval, red-flag scanning, claim-level fact-checking, and structured XAI formatting.
 
-The following latencies reflect reproducible local benchmark measurements under Python 3.12:
-
-| Interaction Workflow | Google Gemini (`gemini-3.5-flash-lite`) | OpenRouter (`meta-llama/llama-3.3-70b-instruct`) | Architectural Reason for Differential |
-|---|:---:|:---:|---|
-| **Follow-up Intake Turn** | **~2.3 seconds** | **~7.7 seconds** | Executes single SOCRATES intake evaluation and state transition update. |
-| **Full Clinical Assessment** | **~12–18 seconds** | **~35–45+ seconds** | Executes multi-pass differential reasoning, self-consistency loops, claim verification, and XAI generation. |
-
-*Disclaimer: These latencies are local test measurements dependent on hardware, geographical location, and provider load; they do not represent cloud SLA guarantees.*
+Response times depend on network latency, upstream cloud provider queue times, and configured model endpoints; the project does not assert fixed latency benchmarks or cloud SLAs.
 
 ---
 
@@ -446,14 +412,15 @@ care-ai/
 │   └── MedQuAD .../            # MedQuAD medical Q&A domain datasets (10 categories)
 │
 ├── cache/                      # Serialized index storage
-│   └── vector_index_v2.pkl     # Prebuilt SciPy CSR sparse index (~26.14 MB, tracked)
+│   └── vector_index_v2.pkl     # Prebuilt SciPy CSR sparse index (~26.14 MiB (27.41 MB), tracked)
 │
-├── eval/                       # Clinical evaluation framework & metrics
-│   ├── run_eval_v5.py          # Automated evaluation runner for 30 test scenarios
-│   ├── metrics_ieee.py         # Clinical evaluation scoring utilities
-│   ├── test_cases_evaluated.json # Raw evaluated benchmark cases
-│   ├── summary_final.csv       # Summary metrics across evaluation battery
-│   └── CARE_AI_tables.txt      # Formatted clinical performance tables
+├── eval/                       # Historical evaluation artifacts & audit
+│   ├── README.md               # Integrity audit report & artifact register
+│   ├── run_eval_v5.py          # Evaluation runner script
+│   ├── metrics_ieee.py         # Evaluation scoring utilities
+│   ├── test_cases_evaluated.json # Raw evaluated benchmark cases (archived)
+│   ├── summary_final.csv       # Summary metrics across evaluation battery (archived)
+│   └── CARE_AI_tables.txt      # Formatted clinical performance tables (archived)
 │
 ├── tests/                      # Verification and unit test suite
 │   ├── test_phase1_verification.py
@@ -469,7 +436,7 @@ care-ai/
 ## Cache Maintenance
 
 Care-AI stores its pre-indexed TF-IDF representation as a versioned sparse archive:
-`cache/vector_index_v2.pkl` (~26.14 MB).
+`cache/vector_index_v2.pkl` (~26.14 MiB (27.41 MB)).
 
 ### Index Regeneration
 If you modify datasets in the `data/` directory or add new knowledge sources, regenerate the cache:
@@ -480,7 +447,7 @@ python rebuild_cache.py
 
 ### Operational Considerations
 - **Memory Consumption During Rebuild**: Rebuilding parses uncompressed XML (`MedlinePlus`), large text files (`ICD-10-CM`), and 10 MedQuAD CSVs simultaneously. This process requires **2–4 GB of RAM** and takes 2–4 minutes depending on CPU performance.
-- **Runtime Efficiency**: Once built, loading `vector_index_v2.pkl` takes only **~25 ms** on standard hardware.
+- **Runtime Efficiency**: Once built, loading `vector_index_v2.pkl` via SciPy CSR sparse deserialization avoids the high memory footprint of dense matrix formats.
 - **Legacy Cache Guard**: Do not restore the legacy `vector_index.pkl` (5.08 GB dense format). The engine automatically detects and purges incompatible or oversized cache formats to protect against system crashes.
 
 ---
