@@ -90,6 +90,182 @@ def is_severe_pain(text: str | None) -> bool:
     return False
 
 
+ENGLISH_PRE_NEGATORS = {
+    "no", "not", "without", "never", "denies", "dont", "cant", "cannot", "free",
+    "don't", "can't", "dont have", "don't have", "denied",
+}
+HINDI_TELUGU_PRE_NEGATORS = {"bina", "बिना", "lekunda", "లేకుండా"}
+HINDI_TELUGU_POST_NEGATORS = {"nahi", "nahin", "नहीं", "ledu", "లేదు"}
+CONTRASTIVE_CONJUNCTIONS = {
+    "but", "however", "yet", "still", "although", "though", "except",
+    "lekin", "magar", "par", "परन्तु", "किन्तु", "लेकिन", "मगर", "కానీ", "కాని",
+}
+
+# Explicit allowlist of approved clinical intake fields from SOCRATES
+APPROVED_CLINICAL_FIELDS = {
+    "symptom_or_topic",
+    "site",
+    "onset",
+    "character",
+    "radiation",
+    "associations",
+    "time_course",
+    "exacerbating",
+    "relieving",
+    "severity",
+    "trigger_activity",
+    "other_details",
+}
+
+TRIVIAL_INTAKE_VALUES = {
+    "", "...", "null", "none", "unknown", "n/a", "na", "not sure",
+    "idk", "i don't know", "i dont know", "no idea", "dunno", "nothing",
+    "nope", "nil", "undefined",
+    "yes", "yeah", "yep", "no", "ok", "okay", "fine", "good", "better",
+    "worse", "same", "maybe", "probably",
+}
+
+# Curated clinical symptom vocabulary (English, Hindi Latin/Devanagari, Telugu Latin/Script)
+# Broad conversational tokens (e.g. "back", "feeling", "sleep", "voice") are excluded as standalone seeds.
+COMMON_SYMPTOM_SEEDS = {
+    # English single-word clinical symptoms
+    "pain", "ache", "aching", "hurt", "hurting", "sore", "soreness",
+    "fever", "cough", "coughing", "migraine", "headache", "nausea",
+    "vomiting", "diarrhea", "diarrhoea", "constipation", "cramp", "cramping",
+    "rash", "rashes", "itch", "itching", "swelling", "swollen",
+    "dizzy", "dizziness", "vertigo", "sprain", "strain", "stiffness",
+    "numbness", "breathless", "breathlessness", "fatigue",
+    # English multi-word phrases to avoid ambiguity of standalone words
+    "sore throat", "throat pain", "stomach ache", "stomach pain",
+    "abdominal pain", "chest pain", "back pain", "neck pain", "joint pain",
+    "runny nose", "blocked nose", "loss of taste", "loss of smell",
+    "shortness of breath", "difficulty breathing", "common cold", "have a cold",
+    "had a cold", "got a cold", "feeling sick", "feeling unwell",
+    "can't breathe", "cannot breathe",
+    # Hindi Latin
+    "bukhar", "dard", "khasi", "khaasi", "zukam", "jukaam", "jukham",
+    "sardard", "ulti", "chakkar", "kamzori",
+    # Hindi Devanagari
+    "दर्द", "बुखार", "खांसी", "जुकाम", "सिरदर्द", "उल्टी", "चक्कर",
+    "कमजोरी", "बदन दर्द", "गले में खराश",
+    # Telugu Latin
+    "noppi", "jwaram", "daggu", "jalubu", "talanopi", "talanoppi",
+    "vanti", "vantulu", "neerasam",
+    # Telugu Script
+    "నొప్పి", "జ్వరం", "దగ్గు", "జలుబు", "తలనొప్పి", "వాంతులు", "నీరసం",
+}
+
+
+def is_indic(s: str) -> bool:
+    """Return True if string contains Devanagari or Telugu characters."""
+    return any(('ऀ' <= ch <= 'ॿ') or ('ఀ' <= ch <= '౿') for ch in s)
+
+
+def _tokenize_words(s: str) -> list[str]:
+    puncts = ".,;!?\"'()[]{}"
+    return [t.strip(puncts) for t in s.lower().split() if t.strip(puncts)]
+
+
+def _is_span_negated(text: str, start: int, end: int) -> bool:
+    """
+    Check if a matched symptom span is negated in its clause context.
+    Conservative: if negated or pre-empted by negation in the same clause, returns True.
+    """
+    pre_text = text[:start]
+    last_sep = max([pre_text.rfind(c) for c in ('.', ';', '!', '?', chr(10))] + [-1])
+    pre_clause = pre_text[last_sep + 1:]
+    pre_tokens = _tokenize_words(pre_clause)
+
+    for i, tok in enumerate(reversed(pre_tokens)):
+        if i >= 5:
+            break
+        if tok in CONTRASTIVE_CONJUNCTIONS:
+            break
+        if tok in ENGLISH_PRE_NEGATORS or tok in HINDI_TELUGU_PRE_NEGATORS:
+            return True
+
+    post_text = text[end:]
+    first_sep_cands = [post_text.find(c) for c in ('.', ';', '!', '?', chr(10)) if post_text.find(c) != -1]
+    first_sep = min(first_sep_cands) if first_sep_cands else len(post_text)
+    post_clause = post_text[:first_sep]
+    post_tokens = _tokenize_words(post_clause)
+
+    for i, tok in enumerate(post_tokens[:3]):
+        if tok in CONTRASTIVE_CONJUNCTIONS:
+            break
+        if tok in HINDI_TELUGU_POST_NEGATORS:
+            return True
+
+    return False
+
+
+def has_affirmative_symptom(text: str, seeds: set | None = None) -> bool:
+    """Check if text contains an affirmative, non-negated symptom term."""
+    if not text or not isinstance(text, str):
+        return False
+    text_lower = text.lower()
+    active_seeds = seeds or COMMON_SYMPTOM_SEEDS
+    for term in active_seeds:
+        if is_indic(term):
+            start = 0
+            while True:
+                pos = text_lower.find(term, start)
+                if pos == -1:
+                    break
+                if not _is_span_negated(text, pos, pos + len(term)):
+                    return True
+                start = pos + 1
+        else:
+            pat = rf'(?:^|[\s\.,;:!?\(\)\[\]])({re.escape(term)})(?:$|[\s\.,;:!?\(\)\[\]])'
+            for m in re.finditer(pat, text_lower):
+                sp_start = m.start(1)
+                sp_end = m.end(1)
+                if not _is_span_negated(text, sp_start, sp_end):
+                    return True
+    return False
+
+
+def has_adequate_clinical_info(
+    collected_info: dict | None = None,
+    user_text: str | None = None,
+    symptom_seeds: set | None = None,
+) -> bool:
+    """
+    Determine whether clinical intake contains substantive symptom information.
+
+    Requires:
+      1. Meaningful primary symptom/topic in collected_info["symptom_or_topic"],
+         OR substantive affirmative symptom description across approved clinical fields.
+         Generic values (e.g. 'yes' in other_details, 'ok' in character) do NOT qualify.
+      2. OR user_text contains an affirmative, non-negated clinical symptom term.
+
+    Returns:
+        True if valid clinical information is found, False otherwise.
+    """
+    if collected_info and isinstance(collected_info, dict):
+        primary = collected_info.get("symptom_or_topic")
+        if primary and not isinstance(primary, bool):
+            cleaned = str(primary).strip().lower()
+            if cleaned and cleaned not in TRIVIAL_INTAKE_VALUES and len(cleaned) >= 2:
+                if not cleaned.isdigit():
+                    return True
+
+        for k, v in collected_info.items():
+            if k not in APPROVED_CLINICAL_FIELDS or v is None or isinstance(v, bool):
+                continue
+            cleaned = str(v).strip().lower()
+            if not cleaned or cleaned in TRIVIAL_INTAKE_VALUES:
+                continue
+            if has_affirmative_symptom(str(v), symptom_seeds):
+                return True
+
+    if user_text and isinstance(user_text, str):
+        if has_affirmative_symptom(user_text, symptom_seeds):
+            return True
+
+    return False
+
+
 def apply_triage_floor(
     triage: str | None,
     differential: list | None,
@@ -98,6 +274,8 @@ def apply_triage_floor(
     severity_level: str | None,
     conditions_agree: bool | None = True,
     user_severity: str | None = None,
+    has_sufficient_info: bool = True,
+    no_new_info_count: int = 0,
 ) -> tuple[str, str | None]:
     """
     Pure safety floor function for Care-AI triage decisions.
@@ -142,5 +320,8 @@ def apply_triage_floor(
 
     if is_severe_pain(user_severity):
         return ("SEE_DOCTOR", "SEVERE_PAIN_SCORE")
+
+    if not has_sufficient_info:
+        return ("SEE_DOCTOR", "INSUFFICIENT_INFORMATION")
 
     return ("SELF_CARE", None)

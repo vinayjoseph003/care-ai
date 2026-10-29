@@ -360,6 +360,8 @@ class CareAI:
         # Explicit list of follow-up questions already asked this complaint.
         # Passed to FOLLOWUP_PROMPT so LLM never repeats one.
         self.asked_followup_questions: list = []
+        # Tracks user messages for the current complaint to prevent cross-complaint symptom leakage
+        self.current_complaint_user_messages: list = []
 
     # ── MEMORY ────────────────────────────────────────────────
 
@@ -1690,6 +1692,7 @@ class CareAI:
             self.followup_asked           = True
             self.new_complaint_turn       = 0
             self.asked_followup_questions = []
+            self.current_complaint_user_messages = []
             self.state                    = ConvState.GATHERING
 
         # ── New symptom / relation detection ─────────────────────
@@ -1707,6 +1710,7 @@ class CareAI:
                 self.state                      = ConvState.GATHERING
                 self.new_complaint_turn         = 0
                 self.asked_followup_questions   = []
+                self.current_complaint_user_messages = []
                 print("  Unrelated complaint — SOCRATES state reset.")
 
             else:
@@ -1759,6 +1763,9 @@ class CareAI:
                 self.user_language = _detected
 
         self._add_turn("user", user_message)
+        if not hasattr(self, "current_complaint_user_messages") or self.current_complaint_user_messages is None:
+            self.current_complaint_user_messages = []
+        self.current_complaint_user_messages.append(user_message)
         self.new_complaint_turn += 1
 
         # ── SOCRATES follow-up engine ─────────────────────────
@@ -1819,7 +1826,11 @@ class CareAI:
         self.last_top_condition = diff[0]['condition'] if diff else ""
         print("done")
 
-        from core.triage_floor import apply_triage_floor, _coerce_confidence
+        from core.triage_floor import (
+            apply_triage_floor,
+            _coerce_confidence,
+            has_adequate_clinical_info,
+        )
 
         conditions_agree = reasoning.get('conditions_agree')
         if conditions_agree is None:
@@ -1827,6 +1838,17 @@ class CareAI:
                 "disagreed on top condition" in str(u).lower()
                 for u in reasoning.get("uncertainty_zones", [])
             )
+
+        if hasattr(self, "current_complaint_user_messages") and self.current_complaint_user_messages:
+            raw_user_text = " ".join(str(m) for m in self.current_complaint_user_messages)
+        else:
+            raw_user_text = " ".join(str(m['content']) for m in self.history if m['role'] == 'user')
+
+        has_adequate_info = has_adequate_clinical_info(
+            collected_info=self.collected_info,
+            user_text=raw_user_text,
+        )
+        has_sufficient_info = has_adequate_info
 
         self.last_triage, floor_reason = apply_triage_floor(
             triage=self.last_triage,
@@ -1836,6 +1858,8 @@ class CareAI:
             severity_level=sev_result.get('severity_level') if sev_result else None,
             conditions_agree=conditions_agree,
             user_severity=self.collected_info.get('severity'),
+            has_sufficient_info=has_sufficient_info,
+            no_new_info_count=self.no_new_info_count,
         )
 
         if isinstance(reasoning, dict):
@@ -1859,6 +1883,9 @@ class CareAI:
         elif cov == "NONE" or (cov == "PARTIAL" and not sev_result):
             low_confidence = True
             low_confidence_reason = "WEAK_CONTEXT"
+        elif not has_sufficient_info:
+            low_confidence = True
+            low_confidence_reason = "INSUFFICIENT_INFORMATION"
 
         # Treatment guidance and red flags: when low_confidence, pass user's symptom topic
         # (collected_info["symptom_or_topic"], fallback to first user message) instead of last_top_condition.
