@@ -277,6 +277,23 @@ def is_english_chunk(chunk: dict) -> bool:
     return True
 
 
+def target_language_line(user_language: dict | None = None) -> str:
+    """
+    Generate target response language instruction line.
+    Falls back to 'English' if user_language is missing or malformed.
+    """
+    lang = 'English'
+    if isinstance(user_language, dict):
+        val = user_language.get('language')
+        if val and isinstance(val, str) and val.strip():
+            lang = val.strip()
+    return (
+        f'Target response language: {lang}. '
+        'Write free-text values (condition descriptions, key findings, guidance, explanations) in this language. '
+        'Keep JSON keys and all enumerated or categorical values (triage levels, probability levels such as HIGH/MEDIUM/LOW, and the specialist label) exactly as the prompt specifies, in English.'
+    )
+
+
 class CareAI:
     def __init__(self, knowledge_chunks: list = None, severity_map: dict = None,
                  router_config: dict = None, precaution_map: dict = None,
@@ -976,8 +993,10 @@ class CareAI:
             for m in recent
         )
         socrates_str = json.dumps(self.collected_info, indent=2)
+        target_lang  = target_language_line(getattr(self, "user_language", None))
         raw = self._llm(
             REASONING_PROMPT,
+            f"{target_lang}\n\n"
             f"Conversation:\n{conv_str}\n\n"
             f"SOCRATES clinical data:\n{socrates_str}\n\n"
             f"{context_str}",
@@ -1049,8 +1068,10 @@ class CareAI:
             for m in recent
         )
         socrates_str = json.dumps(self.collected_info, indent=2)
+        target_lang  = target_language_line(getattr(self, "user_language", None))
         raw_b = self._llm(
             REASONING_PROMPT,
+            f"{target_lang}\n\n"
             f"Conversation:\n{conv_str}\n\n"
             f"SOCRATES clinical data:\n{socrates_str}\n\n"
             f"{context_str}",
@@ -1402,7 +1423,9 @@ class CareAI:
                 + ", ".join(str(p) for p in dataset_precautions[:3] if p)
             )
 
+        target_lang = target_language_line(getattr(self, "user_language", None))
         prompt = (
+            f"{target_lang}\n\n"
             f"Condition: {top_condition} (SELF-CARE level — mild case)\n"
             f"Language: {self.user_language['language']}"
             f"{precaution_note}\n\n"
@@ -1437,7 +1460,9 @@ class CareAI:
                 + ", ".join(str(p) for p in dataset_precautions if p)
             )
 
+        target_lang = target_language_line(getattr(self, "user_language", None))
         prompt = (
+            f"{target_lang}\n\n"
             f"Condition: {top_condition}\n"
             f"Triage level: {triage}\n"
             f"User language: {self.user_language['language']}"
