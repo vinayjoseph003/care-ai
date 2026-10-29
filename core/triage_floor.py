@@ -9,6 +9,7 @@ HIGH_SEVERITY_LEVELS = {"HIGH", "EMERGENCY"}
 
 
 import math
+import re
 
 
 def _coerce_confidence(val: int | float | str | None) -> float | None:
@@ -35,6 +36,60 @@ def _coerce_confidence(val: int | float | str | None) -> float | None:
     return None
 
 
+def is_severe_pain(text: str | None) -> bool:
+    """
+    Determine if user-reported severity text represents severe pain.
+
+    TRUE:
+      - "8/10", "7/10", "9 out of 10", "10", "8"
+      - "severe", "unbearable", "worst pain"
+    FALSE:
+      - "6/10", "3", "mild", "", None, "moderate"
+      - "11/10", "100" (out of range -> False, do not guess)
+      - Ambiguous sentences with no clear score
+      - Bare-number rule: only if the whole string is a single integer 1-10.
+    """
+    if text is None or isinstance(text, bool):
+        return False
+    if not isinstance(text, (str, int, float)):
+        return False
+    cleaned = str(text).strip()
+    if not cleaned:
+        return False
+
+    # 1. Bare-number rule: only if the whole string is a single integer 1-10
+    if re.fullmatch(r"[+-]?\d+", cleaned):
+        try:
+            val = int(cleaned)
+            if 1 <= val <= 10:
+                return val >= 7
+            return False
+        except ValueError:
+            return False
+
+    # 2. X/10 or X out of 10 pattern
+    match = re.search(r"\b(\d+)\s*(?:/|\bout\s+of\b)\s*10\b", cleaned, re.IGNORECASE)
+    if match:
+        try:
+            val = int(match.group(1))
+            if 1 <= val <= 10:
+                return val >= 7
+            return False
+        except ValueError:
+            pass
+
+    # 3. Verbal descriptors (severe, unbearable, worst pain)
+    lower = cleaned.lower()
+    if re.search(r"\b(?:not|no)\s+(?:severe|unbearable|worst\s+pain)\b", lower):
+        return False
+    if "moderately severe" in lower:
+        return False
+    if re.search(r"\b(?:severe|unbearable|worst\s+pain)\b", lower):
+        return True
+
+    return False
+
+
 def apply_triage_floor(
     triage: str | None,
     differential: list | None,
@@ -42,6 +97,7 @@ def apply_triage_floor(
     confidence: int | float | str | None,
     severity_level: str | None,
     conditions_agree: bool | None = True,
+    user_severity: str | None = None,
 ) -> tuple[str, str | None]:
     """
     Pure safety floor function for Care-AI triage decisions.
@@ -57,6 +113,7 @@ def apply_triage_floor(
         confidence: Diagnostic confidence score (0-100), numeric str ('85%'), or None.
         severity_level: Severity string from symptom scorer (e.g. 'LOW', 'HIGH') or None.
         conditions_agree: True if dual reasoning passes agreed or single pass, False if disagreed.
+        user_severity: User-reported severity string from SOCRATES extraction, or None.
 
     Returns:
         (final_triage, reason_code_or_None)
@@ -82,5 +139,8 @@ def apply_triage_floor(
 
     if conditions_agree is False:
         return ("SEE_DOCTOR", "CONDITION_DISAGREEMENT")
+
+    if is_severe_pain(user_severity):
+        return ("SEE_DOCTOR", "SEVERE_PAIN_SCORE")
 
     return ("SELF_CARE", None)

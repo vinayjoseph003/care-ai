@@ -1840,6 +1840,7 @@ class CareAI:
             confidence=reasoning.get('confidence_score'),
             severity_level=sev_result.get('severity_level') if sev_result else None,
             conditions_agree=conditions_agree,
+            user_severity=self.collected_info.get('severity'),
         )
 
         # Compute low_confidence once after the triage floor.
