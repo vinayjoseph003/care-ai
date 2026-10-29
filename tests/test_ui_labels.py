@@ -69,7 +69,9 @@ class TestUiLabels(unittest.TestCase):
 
         self.assertNotIn("Tamil", welcome_card, "Welcome card text must not claim Tamil support")
         self.assertNotIn("தமிழ்", welcome_card, "Welcome card chips must not include Tamil chip")
-        self.assertIn("Hindi, Telugu, or English", welcome_card)
+        self.assertIn("Ask in English, Hindi or Telugu", welcome_card)
+        self.assertNotIn("any language", welcome_card)
+        self.assertNotIn("Code-mix", welcome_card)
 
     # ── 3. Doctor Finder Heading Template & CSS ──────────────────
 
