@@ -1181,6 +1181,7 @@ class CareAI:
         severity_result,
         top_condition: str = None,
         low_confidence: bool = False,
+        triage: str = None,
     ):
         sev_note = ""
         if severity_result:
@@ -1190,7 +1191,7 @@ class CareAI:
                 f"High-risk symptoms: {severity_result.get('high_risk_symptoms', [])}\n"
                 f"Recommendation: {severity_result.get('recommendation', '')}"
             )
-        triage = reasoning.get('triage_level', 'SEE_DOCTOR')
+        triage = triage or self.last_triage or reasoning.get('triage_level', 'SEE_DOCTOR')
         spec   = reasoning.get('specialist', 'General Practitioner')
         diff   = self.last_differential if self.last_differential else reasoning.get('differential_diagnosis', [])
         top_cond = top_condition or self.last_top_condition or (diff[0]['condition'] if diff else 'Unknown')
@@ -1353,7 +1354,7 @@ class CareAI:
     # ── PASS 8: XAI EXPLANATION (streamed) ────────────────────
     # [P1-C] Rewritten: cause -> reasoning -> recommendation format
 
-    def _xai_explain_streamed(self, reasoning, factcheck, low_confidence: bool = False):
+    def _xai_explain_streamed(self, reasoning, factcheck, low_confidence: bool = False, triage: str = None):
         last_user = next(
             (m['content'] for m in reversed(self.history) if m['role'] == 'user'), ""
         )
@@ -1363,7 +1364,7 @@ class CareAI:
         supporting   = diff[0].get('supporting_symptoms', []) if diff else []
         key_evidence = diff[0].get('key_evidence', '') if diff else ''
         uncertainty  = reasoning.get('uncertainty_zones', ['nothing specific'])
-        triage       = reasoning.get('triage_level', 'SEE_DOCTOR')
+        triage       = triage or self.last_triage or reasoning.get('triage_level', 'SEE_DOCTOR')
         triage_reason = reasoning.get('triage_reason', '')
         sources      = reasoning.get('knowledge_sources', [])
 
@@ -1837,6 +1838,9 @@ class CareAI:
             user_severity=self.collected_info.get('severity'),
         )
 
+        if isinstance(reasoning, dict):
+            reasoning['triage_level'] = self.last_triage
+
         # Compute low_confidence once after the triage floor.
         conf_num = _coerce_confidence(reasoning.get('confidence_score'))
         low_confidence = False
@@ -1893,6 +1897,7 @@ class CareAI:
             sev_result,
             top_condition=self.last_top_condition,
             low_confidence=low_confidence,
+            triage=self.last_triage,
         )
 
         print("  Claim-level fact-checking...", end=" ", flush=True)
@@ -1912,7 +1917,7 @@ class CareAI:
         if final != answer:
             print("  Auto-corrected based on fact-check.")
 
-        xai = self._xai_explain_streamed(reasoning, fc, low_confidence=low_confidence)
+        xai = self._xai_explain_streamed(reasoning, fc, low_confidence=low_confidence, triage=self.last_triage)
 
         mental_health_msg = ""
         if self._needs_mental_health_checkin(self.last_top_condition, self.last_triage):
