@@ -50,6 +50,7 @@ def _get_setting(key: str, default: str = "") -> str:
 
 
 from ui.helpers import (
+    safe_load,
     strip_rendered_emoji_prefix,
     sanitize_html,
     top_diagnosis_label,
@@ -1563,7 +1564,10 @@ def get_session_bot() -> CareAI:
     while referencing the shared cached knowledge base and vector store.
     """
     if "bot" not in st.session_state:
-        res = load_shared_resources()
+        res, err_msg = safe_load(load_shared_resources)
+        if err_msg:
+            st.error(err_msg)
+            st.stop()
         st.session_state.bot = CareAI(
             knowledge_chunks=res["chunks"],
             severity_map=res["severity_map"],
