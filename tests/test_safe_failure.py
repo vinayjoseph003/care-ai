@@ -272,12 +272,15 @@ class TestSafeFailure(unittest.TestCase):
 class TestRouterStreamBehavior(unittest.TestCase):
     """Test LLMRouter stream isolation and mid-stream failure behavior."""
 
-    def test_stream_all_providers_failed_raises_exception(self):
+    @patch("core.llm_router._is_ollama_online", return_value=False)
+    @patch("urllib.request.urlopen")
+    def test_stream_all_providers_failed_raises_exception(self, mock_urlopen, _mock_ollama):
         """When all providers fail, stream() raises AllProvidersFailedError and yields no '[ERROR]'."""
         router = LLMRouter({
             "openrouter_api_key": "fake_key",
             "gemini_api_key": "fake_key",
         })
+        mock_urlopen.assert_not_called()
 
         with patch("core.llm_router._call_openrouter_stream", side_effect=Exception("OpenRouter timeout")), \
              patch("core.llm_router._call_gemini_stream", side_effect=Exception("Gemini quota")):
@@ -288,12 +291,15 @@ class TestRouterStreamBehavior(unittest.TestCase):
 
             self.assertIn("All LLM providers failed", str(ctx.exception))
 
-    def test_mid_stream_failure_does_not_mix_providers(self):
+    @patch("core.llm_router._is_ollama_online", return_value=False)
+    @patch("urllib.request.urlopen")
+    def test_mid_stream_failure_does_not_mix_providers(self, mock_urlopen, _mock_ollama):
         """If a provider fails mid-stream after tokens are yielded, do not fall through to another provider."""
         router = LLMRouter({
             "openrouter_api_key": "fake_key_or",
             "gemini_api_key": "fake_key_gemini",
         })
+        mock_urlopen.assert_not_called()
 
         # Generator that yields 2 tokens then raises an exception
         def failing_stream(*args, **kwargs):
