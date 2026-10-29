@@ -1051,12 +1051,6 @@ class CareAI:
         )
 
         if not needs_second:
-            uncertainty = list(result_a.get('uncertainty_zones', []))
-            uncertainty.append(
-                f"Self-consistency: skipped (confidence {confidence_a}% >= "
-                f"{self.CONSISTENCY_THRESHOLD}% threshold — single pass sufficient)."
-            )
-            result_a['uncertainty_zones'] = uncertainty
             result_a['conditions_agree']  = True
             print(f"\n  Self-consistency skipped (confidence={confidence_a}%)")
             return result_a

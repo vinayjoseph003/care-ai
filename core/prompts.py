@@ -327,6 +327,7 @@ IMPORTANT GRADING RULES:
   a specific fact (drug name, statistic, rare condition) not found anywhere in the context.
 - Do NOT flag claims as unsupported merely because they are general medical advice
   (e.g. "rest and drink fluids", "see a doctor if it worsens") — these are always valid.
+- Do NOT flag claims that restate the user's own reported symptoms, timeline or history as unsupported.
 - Do NOT flag the disclaimer sentence as unsupported.
 
 Return ONLY JSON:
@@ -367,7 +368,9 @@ Write EXACTLY 3 short bullet points following this chain:
 • Because [another symptom or fact] → the AI looked at [what source / what reasoning]
 • Therefore [what was recommended / what action] because [simple reason]
 
-Then add ONE warm closing sentence reassuring the user.
+Then add ONE closing sentence conditioned on the triage decision:
+- For SELF_CARE: a warm, reassuring closing sentence (e.g. rest easy, feeling better soon).
+- For SEE_DOCTOR, URGENT_CARE, or EMERGENCY: do NOT use "rest easy" or "feeling better soon" style reassurance; provide a calm reminder to get medical evaluation.
 
 STRICT RULES:
 - NO percentages, NO confidence numbers, NO probability scores.
@@ -410,7 +413,9 @@ Rules:
 - Be specific to the condition — not generic advice.
 - LOW/MEDIUM triage: 3-5 home care steps.
 - HIGH/EMERGENCY triage: 2-3 steps max, emphasise escalation urgently.
-- Escalation timeline must name a specific number of days AND a specific worsening symptom.
+- Escalation timeline rule is conditioned on triage:
+  - For SEE_DOCTOR or URGENT_CARE: must NOT advise waiting days ("consult a doctor within 24-48 hours, or emergency care if [symptom]").
+  - For SELF_CARE: monitor 3-5 days.
 - Return ONLY valid JSON, no extra text.
 """
 
