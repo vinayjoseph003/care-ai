@@ -4,7 +4,30 @@ Contains ZERO Streamlit imports to guarantee fast and isolated unit testing.
 """
 
 import html
+import logging
 import re
+from typing import Any, Callable
+
+logger = logging.getLogger(__name__)
+
+LOAD_FAILED_MESSAGE = (
+    "The knowledge base could not be loaded. Please refresh the page in a minute. "
+    "If this is a medical emergency, call 112 now."
+)
+
+
+def safe_load(loader: Callable[[], Any]) -> tuple[Any, str | None]:
+    """
+    Safely execute a resource loader function.
+    Catches all standard exceptions (including MemoryError) without catching BaseException.
+    Logs only the exception type name to avoid leaking traceback details or user/secret data.
+    Returns (result, None) on success or (None, LOAD_FAILED_MESSAGE) on failure.
+    """
+    try:
+        return loader(), None
+    except Exception as e:
+        logger.error("Knowledge base loading failed: %s", type(e).__name__)
+        return None, LOAD_FAILED_MESSAGE
 
 
 def strip_rendered_emoji_prefix(text: str) -> str:
