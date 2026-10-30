@@ -45,7 +45,7 @@
 - [Verification & Automated Testing](#verification--automated-testing)
 - [Project Structure](#project-structure)
 - [Cache Maintenance](#cache-maintenance)
-- [Privacy & Healthcare Safety Considerations](#privacy--healthcare-safety-considerations)
+- [Privacy and Limitations](#privacy-and-limitations)
 - [Copyright and Licensing](#copyright-and-licensing)
 - [Authors & Acknowledgments](#authors--acknowledgments)
 
@@ -317,7 +317,7 @@ OLLAMA_HOST=http://localhost:11434
 ```
 
 > [!CAUTION]
-> Never commit `.env` or paste live API credentials into public repositories. `.env` is included in `.gitignore` by default.
+> Never commit `.env` or paste live API credentials into public repositories. Use `.env.example` as a template for local development; `.env` and `.streamlit/secrets.toml` are included in `.gitignore` by default. When deploying to Streamlit Community Cloud, supply credentials via the platform's native secrets management (`st.secrets`) rather than committing real keys.
 
 ### 5. Launch the Streamlit Web UI
 
@@ -452,12 +452,13 @@ python rebuild_cache.py
 
 ---
 
-## Privacy & Healthcare Safety Considerations
+## Privacy and Limitations
 
-1. **Experimental Scope**: Care-AI is designed exclusively for academic demonstration and engineering research. It has not been approved or certified by any regulatory agency (e.g., FDA, EMA, CDSCO) as Software as a Medical Device (SaMD).
-2. **Patient Data Privacy**: Do not submit real names, medical record numbers, phone numbers, or Protected Health Information (PHI). Demonstrations run on public cloud infrastructure are not configured for HIPAA or GDPR compliance.
-3. **Third-Party Processing**: Cloud LLM providers (Google, OpenRouter, Groq) process submitted prompts according to their respective enterprise and API terms. Local execution with Ollama ensures complete data containment on-premises.
-4. **Clinical Boundaries**: Automated symptom checkers cannot conduct physical examinations, auscultation, laboratory blood panels, or imaging. Any urgent or severe health concern must be evaluated by a licensed medical professional.
+1. **Not Clinically Validated**: Care-AI is strictly an academic engineering research prototype for preliminary triage exploration. It has not undergone clinical trials, multi-center studies, or regulatory validation (such as FDA, EMA, or CDSCO certification as Software as a Medical Device). It cannot conduct physical examinations, laboratory tests, or imaging, and must not replace professional clinical judgment.
+2. **Non-Clinician-Reviewed Phrase Lists**: Deterministic emergency red-flag triggers for Hindi and Telugu (in both native Devanagari/Telugu scripts and transliterated Latin script) are heuristic keyword rules that have not been reviewed by a qualified clinician or native-speaker clinical panel.
+3. **Explicit Consent for Location**: The Doctor & Specialist Finder queries external OpenStreetMap map services (Overpass API at `overpass-api.de`) only after explicit user consent via an in-browser checkbox. Geographic coordinates are held ephemerally in session memory and are never persisted to disk.
+4. **In-Memory Exports Only**: The web interface export utility produces in-memory JSON downloads (`st.download_button`) directly to the user's browser. Raw symptom inputs and session transcripts are not saved or logged to the host filesystem.
+5. **Third-Party LLM Processing**: User conversation inputs and extracted clinical summaries are transmitted only to the configured LLM providers supported in the codebase: Google Gemini, OpenRouter, and Groq Cloud (or retained entirely on-premises if using a local Ollama instance). No Protected Health Information (PHI) or real patient identifiers should ever be entered.
 
 ---
 
