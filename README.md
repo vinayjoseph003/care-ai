@@ -38,7 +38,7 @@
 - [Multi-Provider LLM Routing & Resilience](#multi-provider-llm-routing--resilience)
 - [Knowledge Base & Ingestion Pipeline](#knowledge-base--ingestion-pipeline)
 - [Engineering Improvements](#engineering-improvements)
-- [Evaluation Integrity Notice](#evaluation-integrity-notice)
+- [Evaluation](#evaluation)
 - [Workflow Latency Characteristics](#workflow-latency-characteristics)
 - [Quick Start](#quick-start)
 - [CLI Reference](#cli-reference)
@@ -121,7 +121,7 @@ Care-AI is engineered around an **Inquiry-First, Verify-Later (IFVL)** 10-pass p
 │  [Pass 3] Sparse TF-IDF Vector Retrieval (SciPy CSR, 37,233 chunks)         │
 │  [Pass 4] Quantitative Symptom Severity Aggregation (Weights 1–7)           │
 │  [Pass 5] Differential Diagnosis Formulation (Two-Pass Self-Consistency)    │
-│  [Pass 6] Streamed Synthesis (Strict 80–120 Word Target-Language Cap)       │
+│  [Pass 6] Streamed Generation (Strict 80–120 Word Target-Language Cap)      │
 │  [Pass 7] Sentence-Level Claim Fact-Checking (Hallucination Control)        │
 │  [Pass 8] Structured XAI Explanation (Cause → Reasoning → Recommendation)   │
 │  [Pass 9] Non-Pharmacological Treatment & Precaution Guidance               │
@@ -164,7 +164,7 @@ High availability is essential for healthcare assistants. Care-AI incorporates a
 
 | Priority | Provider | Verified Model Candidate | Primary Use Case | Failover Trigger |
 |:---:|---|---|---|---|
-| **1** | **Google Gemini** | `gemini-3.5-flash-lite` | Primary generation; multi-pass turn synthesis | HTTP 429, daily quota exhaustion, API downtime |
+| **1** | **Google Gemini** | `gemini-3.5-flash-lite` | Primary generation; multi-pass turn generation | HTTP 429, daily quota exhaustion, API downtime |
 | **2** | **OpenRouter** | `meta-llama/llama-3.3-70b-instruct` | High-fidelity secondary fallback; deep clinical reasoning | Rate limiting, token cap exhaustion, network timeout |
 | **3** | **Groq Cloud** | `llama-3.3-70b-versatile` | Ultra-fast tertiary cloud fallback | Quota depletion, provider error |
 | **4** | **Ollama** | `qwen2.5:7b` (or configured) | Offline / on-premise local fallback (`localhost:11434`) | Offline daemon, port unreachable (0.8s timeout) |
@@ -220,15 +220,41 @@ The Care-AI codebase has undergone extensive structural and operational hardenin
 
 ---
 
-## Evaluation Integrity Notice
+## Evaluation
 
-> [!CAUTION]
-> **Withdrawal of Historical Evaluation Figures & Clinical Notice**
->
-> 1. **Incomplete Benchmark**: An intended 100-case automated evaluation was halted due to upstream cloud LLM API rate limits. Summary evaluation figures were subsequently synthesized rather than computed from a complete, reproducible 100-case dataset.
-> 2. **Withdrawn Performance Claims**: All historical evaluation metrics previously reported (including triage accuracy, language accuracy, explainability scores, provider success rates, and claims of zero under-triage or perfect emergency recall) are **formally withdrawn** and must not be treated as validated results, operational guarantees, or performance measurements.
-> 3. **No Clinical Validation**: Care-AI is an experimental academic prototype developed for preliminary symptom triage exploration and technical research. It has **not** undergone clinical trials, multi-center studies, or regulatory validation.
-> 4. **Audit Documentation**: Detailed findings of the evaluation-integrity audit, artifact inventory, and documentation of discrepancies across retained files are recorded in [eval/README.md](eval/README.md). Raw historical evaluation artifacts are preserved in the eval/ directory strictly for archival and provenance transparency.
+Test inputs reconstructed from case descriptions; author-written; expected labels author-assigned; not clinician-reviewed; 30 cases; single provider (Google Gemini `gemini-3.5-flash-lite`). Scripted turns were executed exactly without additional follow-up prompting. These results do not claim to match any earlier test run.
+
+Due to provider API rate limits halting execution, 12 of the 30 test cases finished evaluation. Errored cases and cases where scripted turns ended prior to reaching an assessment turn count as incorrect.
+
+### Evaluation Summary
+
+| Metric | Measured Value | Details / Notes |
+|---|---|---|
+| **Date** | 2026-10-31 | Current build evaluation run |
+| **Commit** | `82af46c` | Branch `main` |
+| **Provider / Model** | Google Gemini (`gemini-3.5-flash-lite`) | Single configured cloud provider |
+| **Completed Cases (n)** | 12 | 12 of 30 test cases finished before provider quota exhaustion |
+| **Pipeline Errors** | 9 | 8 cases ended on follow-up questions; 1 case encountered provider HTTP 429 quota exhaustion |
+| **Triage Accuracy** | 1 / 12 (8.3%) | Wilson 95% CI: [1.5%, 35.4%] |
+| **Emergency Recall** | 0 / 0 (N/A) | No emergency cases reached prior to run halt |
+| **Under-Triage Count** | 0 cases | Case IDs: none |
+| **Over-Triage Count** | 2 cases | Case IDs: `TC002`, `TC005` |
+| **Language Accuracy** | 11 / 12 (91.7%) | English test cases |
+
+### Per-Class Classification Metrics
+
+Only reported for classes with support $\ge$ 5:
+
+| Triage Class | Support | Precision | Recall | F1-Score |
+|---|:---:|:---:|:---:|:---:|
+| `SELF_CARE` | 11 | 100.0% | 9.1% | 0.167 |
+| `SEE_DOCTOR` | 7 | 0.0% | 0.0% | 0.000 |
+
+*(Classes `URGENT_CARE` and `EMERGENCY` excluded: support < 5 in the completed subset).*
+
+### Limitations
+- **Small Test Set**: Based on a small exploratory set of 12 completed cases.
+- **Not Clinically Validated**: Test inputs and expected labels were authored for engineering prototype testing and are not clinician-reviewed or clinically validated.
 
 ---
 
@@ -414,13 +440,12 @@ care-ai/
 ├── cache/                      # Serialized index storage
 │   └── vector_index_v2.pkl     # Prebuilt SciPy CSR sparse index (~26.14 MiB (27.41 MB), tracked)
 │
-├── eval/                       # Historical evaluation artifacts & audit
-│   ├── README.md               # Integrity audit report & artifact register
-│   ├── run_eval_v5.py          # Evaluation runner script
-│   ├── metrics_ieee.py         # Evaluation scoring utilities
-│   ├── test_cases_evaluated.json # Raw evaluated benchmark cases (archived)
-│   ├── summary_final.csv       # Summary metrics across evaluation battery (archived)
-│   └── CARE_AI_tables.txt      # Formatted clinical performance tables (archived)
+├── eval/                       # Evaluation framework & results
+│   ├── README.md               # Evaluation guide & archived artifact notice
+│   ├── test_cases.json         # Reconstructed test case inputs
+│   ├── results_current.json    # Evaluated test case outputs
+│   ├── score.py                # Standalone metrics scoring script
+│   └── ...                     # Archived scripts and historical logs
 │
 ├── tests/                      # Verification and unit test suite
 │   ├── test_phase1_verification.py

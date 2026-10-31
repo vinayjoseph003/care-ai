@@ -1,0 +1,221 @@
+{
+ "note": "Test inputs reconstructed from case descriptions in eval/test_cases_evaluated.json; the original inputs were not preserved. Author-written, not clinician-reviewed. Follow-up replies are fixed in advance and not tuned to results.",
+ "cases": [
+  {
+   "id": "TC001",
+   "turns": [
+    "I have a mild headache since this morning.",
+    "No, nothing else. No other symptoms and no medical conditions."
+   ]
+  },
+  {
+   "id": "TC002",
+   "turns": [
+    "I have a runny nose, sneezing and a mild sore throat for two days.",
+    "No, nothing else. No other symptoms and no medical conditions."
+   ]
+  },
+  {
+   "id": "TC003",
+   "turns": [
+    "I have a mild stomach ache after eating lunch today.",
+    "No, nothing else. No other symptoms and no medical conditions."
+   ]
+  },
+  {
+   "id": "TC004",
+   "turns": [
+    "I have mild lower back pain after exercising yesterday.",
+    "No, nothing else. No other symptoms and no medical conditions."
+   ]
+  },
+  {
+   "id": "TC005",
+   "turns": [
+    "I have a mild fever of 99.5 F since last night.",
+    "No, nothing else. No other symptoms and no medical conditions.",
+    "No cough or breathing problems."
+   ]
+  },
+  {
+   "id": "TC006",
+   "turns": [
+    "I have been constipated for three days.",
+    "No, nothing else. No other symptoms and no medical conditions."
+   ]
+  },
+  {
+   "id": "TC007",
+   "turns": [
+    "I have a small mild itchy skin rash on my forearm since yesterday.",
+    "No, nothing else. No other symptoms and no medical conditions."
+   ]
+  },
+  {
+   "id": "TC008",
+   "turns": [
+    "I have a dry cough for three days.",
+    "No, nothing else. No other symptoms and no medical conditions.",
+    "No fever and no breathlessness."
+   ]
+  },
+  {
+   "id": "TC009",
+   "turns": [
+    "I get acidity and heartburn after meals almost every day this week.",
+    "No, nothing else. No other symptoms and no medical conditions."
+   ]
+  },
+  {
+   "id": "TC010",
+   "turns": [
+    "My eyes feel strained and tired after long hours on the computer screen.",
+    "No, nothing else. No other symptoms and no medical conditions."
+   ]
+  },
+  {
+   "id": "TC011",
+   "turns": [
+    "I got a muscle cramp in my calf last night, it is fine now.",
+    "No, nothing else. No other symptoms and no medical conditions."
+   ]
+  },
+  {
+   "id": "TC012",
+   "turns": [
+    "I feel mildly anxious before my exam next week.",
+    "No, nothing else. No other symptoms and no medical conditions.",
+    "Sleeping and eating are normal. I do not feel unsafe."
+   ]
+  },
+  {
+   "id": "TC013",
+   "turns": [
+    "I have mild loose motions since this morning, three times today.",
+    "No, nothing else. No other symptoms and no medical conditions."
+   ]
+  },
+  {
+   "id": "TC014",
+   "turns": [
+    "मेरे घुटने में हल्का दर्द है, दो दिन से, सीढ़ियाँ चढ़ते समय ज़्यादा होता है।",
+    "नहीं, और कोई तकलीफ़ नहीं है।"
+   ]
+  },
+  {
+   "id": "TC015",
+   "turns": [
+    "నాకు రెండు రోజులుగా తేలికపాటి తలనొప్పి ఉంది.",
+    "లేదు, ఇంకా ఏ ఇబ్బంది లేదు."
+   ]
+  },
+  {
+   "id": "TC016",
+   "turns": [
+    "I have numbness on the left side of my face and arm that is getting worse over the last hour.",
+    "No injury. It keeps spreading.",
+    "I also feel weak on that side."
+   ]
+  },
+  {
+   "id": "TC017",
+   "turns": [
+    "I suddenly got the worst headache of my life just now.",
+    "It came on in seconds.",
+    "I also feel nauseous."
+   ]
+  },
+  {
+   "id": "TC018",
+   "turns": [
+    "One side of my face is drooping and my arm feels weak since 30 minutes.",
+    "No, nothing else. No other symptoms and no medical conditions."
+   ]
+  },
+  {
+   "id": "TC019",
+   "turns": [
+    "My father has slurred speech and seems confused since a few minutes ago.",
+    "No, nothing else. No other symptoms and no medical conditions."
+   ]
+  },
+  {
+   "id": "TC020",
+   "turns": [
+    "My brother just had a seizure and is still drowsy.",
+    "No, nothing else. No other symptoms and no medical conditions."
+   ]
+  },
+  {
+   "id": "TC021",
+   "turns": [
+    "I suddenly lost vision in one eye a few minutes ago.",
+    "No, nothing else. No other symptoms and no medical conditions."
+   ]
+  },
+  {
+   "id": "TC022",
+   "turns": [
+    "I feel very dizzy and cannot keep my balance, I keep falling to one side.",
+    "No, nothing else. No other symptoms and no medical conditions."
+   ]
+  },
+  {
+   "id": "TC023",
+   "turns": [
+    "I have a high fever and a very stiff neck since this morning.",
+    "Bright light hurts my eyes.",
+    "I also have a bad headache."
+   ]
+  },
+  {
+   "id": "TC024",
+   "turns": [
+    "I have crushing chest pain spreading to my left arm."
+   ]
+  },
+  {
+   "id": "TC025",
+   "turns": [
+    "I have chest pain and I am struggling to breathe."
+   ]
+  },
+  {
+   "id": "TC026",
+   "turns": [
+    "My heart is racing and I fainted a few minutes ago.",
+    "It is still racing.",
+    "I feel very weak."
+   ]
+  },
+  {
+   "id": "TC027",
+   "turns": [
+    "I am short of breath even while sitting at rest.",
+    "It started suddenly an hour ago.",
+    "I cannot speak full sentences."
+   ]
+  },
+  {
+   "id": "TC028",
+   "turns": [
+    "My legs are swollen for a week and I get breathless when I walk.",
+    "No, nothing else. No other symptoms and no medical conditions.",
+    "I have no chest pain and I can lie flat comfortably."
+   ]
+  },
+  {
+   "id": "TC029",
+   "turns": [
+    "मुझे सीने में तेज़ दर्द हो रहा है और पसीना आ रहा है।",
+    "हाँ, दर्द बाएँ हाथ में भी जा रहा है।"
+   ]
+  },
+  {
+   "id": "TC030",
+   "turns": [
+    "I have jaw pain and I am sweating a lot, and I feel uneasy."
+   ]
+  }
+ ]
+}
