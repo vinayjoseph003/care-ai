@@ -222,24 +222,24 @@ The Care-AI codebase has undergone extensive structural and operational hardenin
 
 ## Evaluation
 
-Test inputs reconstructed from case descriptions; author-written; expected labels author-assigned; not clinician-reviewed; 30 cases; single provider (Google Gemini `gemini-3.5-flash-lite`). Scripted turns were executed exactly without additional follow-up prompting. These results do not claim to match any earlier test run.
+Test inputs reconstructed from case descriptions; author-written; expected labels author-assigned; not clinician-reviewed; 30 cases. Scripted turns were executed with the conversational intake engine. If no triage assessment was produced after scripted turns ended, the fixed harness reply `"No, that is all I can tell you."` was sent up to 3 times to allow the model to reach a final assessment. Cases finishing without a triage assessment after drain turns count as incorrect. Runs were executed in prioritized order with emergency/red-flag cases first (`TC016`–`TC030`), followed by remaining cases (`TC001`–`TC015`), with automatic provider fallback enabled across Gemini and OpenRouter. These results do not claim to match any earlier test run.
 
-Due to provider API rate limits halting execution, 12 of the 30 test cases finished evaluation. Errored cases and cases where scripted turns ended prior to reaching an assessment turn count as incorrect.
+All 30 of 30 test cases completed evaluation without provider exhaustion.
 
 ### Evaluation Summary
 
 | Metric | Measured Value | Details / Notes |
 |---|---|---|
 | **Date** | 2026-10-31 | Current build evaluation run |
-| **Commit** | `82af46c` | Branch `main` |
-| **Provider / Model** | Google Gemini (`gemini-3.5-flash-lite`) | Single configured cloud provider |
-| **Completed Cases (n)** | 12 | 12 of 30 test cases finished before provider quota exhaustion |
-| **Pipeline Errors** | 9 | 8 cases ended on follow-up questions; 1 case encountered provider HTTP 429 quota exhaustion |
-| **Triage Accuracy** | 1 / 12 (8.3%) | Wilson 95% CI: [1.5%, 35.4%] |
-| **Emergency Recall** | 0 / 0 (N/A) | No emergency cases reached prior to run halt |
-| **Under-Triage Count** | 0 cases | Case IDs: none |
-| **Over-Triage Count** | 2 cases | Case IDs: `TC002`, `TC005` |
-| **Language Accuracy** | 11 / 12 (91.7%) | English test cases |
+| **Commit** | `908473f` | Branch `main` |
+| **Providers Used** | Gemini (15), OpenRouter (11), Deterministic Red-Flag (4) | Multi-provider fallback chain |
+| **Completed Cases (n)** | 30 / 30 | 30 completed cases; 0 provider error; 0 not run |
+| **Drain Turns Used** | 10 turns across 6 cases | Fixed response sent when turns exhausted |
+| **Triage Accuracy** | 24 / 30 (80.0%) | Wilson 95% CI: [62.7%, 90.5%] |
+| **Emergency Recall** | 11 / 14 (78.6%) | Positive emergency support: 14 |
+| **Under-Triage Count** | 3 cases | Case IDs: `TC017`, `TC022`, `TC030` |
+| **Over-Triage Count** | 3 cases | Case IDs: `TC002`, `TC005`, `TC010` |
+| **Language Accuracy** | 30 / 30 (100.0%) | English: 27/27, Hindi: 2/2, Telugu: 1/1 |
 
 ### Per-Class Classification Metrics
 
@@ -247,14 +247,15 @@ Only reported for classes with support $\ge$ 5:
 
 | Triage Class | Support | Precision | Recall | F1-Score |
 |---|:---:|:---:|:---:|:---:|
-| `SELF_CARE` | 11 | 100.0% | 9.1% | 0.167 |
-| `SEE_DOCTOR` | 7 | 0.0% | 0.0% | 0.000 |
+| `SELF_CARE` | 13 | 100.0% | 72.7% | 0.842 |
+| `SEE_DOCTOR` | 11 | 45.5% | 100.0% | 0.625 |
+| `EMERGENCY` | 14 | 100.0% | 78.6% | 0.880 |
 
-*(Classes `URGENT_CARE` and `EMERGENCY` excluded: support < 5 in the completed subset).*
+*(Class `URGENT_CARE` excluded: support < 5 in the evaluation set).*
 
 ### Limitations
-- **Small Test Set**: Based on a small exploratory set of 12 completed cases.
-- **Not Clinically Validated**: Test inputs and expected labels were authored for engineering prototype testing and are not clinician-reviewed or clinically validated.
+- **Author-Authored Benchmark**: Test inputs and expected labels were reconstructed from case descriptions by the author and are not clinician-reviewed.
+- **Not Clinically Validated**: Care-AI has not undergone clinical validation, medical trials, or regulatory clearance.
 
 ---
 

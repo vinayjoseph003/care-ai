@@ -1,8 +1,15 @@
 """
 eval/run_evaluation.py — Evaluates Care-AI on eval/test_cases.json
 
-Runs each case through the real CareAI pipeline using a single configured provider (Gemini).
-Saves results per case to eval/results_current.json, with resume capability.
+Harness Rules:
+1. Run order: Emergency/red-flag cases first (TC016-TC030), then the rest (TC001-TC015).
+2. Enable router fallback chain (Gemini, OpenRouter, Groq).
+3. Drain turns rule: After scripted turns, if no triage was produced, send the fixed reply
+   "No, that is all I can tell you." up to 3 times, recording drain_turns_used per case.
+4. Record provider_used per case.
+5. If every provider is rate-limited, mark remaining cases as "not_run" and halt.
+   Rate limits are not scored as model failures.
+6. Saves raw per-case outputs to eval/results_current.json incrementally with resume capability.
 """
 
 import os
@@ -13,7 +20,6 @@ import subprocess
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Ensure root is in sys.path
 WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if WORKSPACE_ROOT not in sys.path:
     sys.path.insert(0, WORKSPACE_ROOT)
@@ -30,7 +36,9 @@ TRIAGE_ORDER = {
     "EMERGENCY": 3,
 }
 
-DELAY_SECONDS = 4.5  # Bounded pause between pipeline calls to prevent rate limits
+DRAIN_REPLY = "No, that is all I can tell you."
+MAX_DRAIN_TURNS = 3
+DELAY_SECONDS = 3.5  # Polite delay between pipeline calls to reduce rate limit frequency
 
 
 def get_git_commit():
@@ -51,17 +59,20 @@ def main():
         sys.exit(1)
 
     with open(test_cases_path, "r", encoding="utf-8") as f:
-        cases_input = json.load(f)["cases"]
+        all_cases = json.load(f)["cases"]
 
     with open(test_eval_path, "r", encoding="utf-8") as f:
         eval_cases = {c["id"]: c for c in json.load(f)["cases"]}
 
-    # Load existing results if resuming
+    # Reorder cases: TC016-TC030 first, then TC001-TC015
+    emergency_cases = [c for c in all_cases if c["id"] >= "TC016"]
+    other_cases = [c for c in all_cases if c["id"] < "TC016"]
+    ordered_cases = emergency_cases + other_cases
+
+    # Initialize results container
     results_data = {
         "date": datetime.now().strftime("%Y-%m-%d"),
         "commit": get_git_commit(),
-        "provider": "gemini",
-        "model": os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
         "cases": [],
     }
 
@@ -72,7 +83,7 @@ def main():
                 old_data = json.load(f)
                 if isinstance(old_data, dict) and "cases" in old_data:
                     results_data = old_data
-                    completed_ids = {c["id"] for c in results_data["cases"]}
+                    completed_ids = {c["id"] for c in results_data["cases"] if c.get("status") in ("completed", "provider_error")}
                     print(f"Resuming: found {len(completed_ids)} already evaluated cases.")
         except Exception as e:
             print(f"Could not read existing results, starting fresh: {e}")
@@ -81,18 +92,15 @@ def main():
     print("Initializing knowledge chunks...")
     chunks, sev_map, prec_map = build_all_chunks(os.path.join(WORKSPACE_ROOT, "data"))
 
-    # Configure strictly single provider: Gemini
-    gemini_key = os.getenv("GEMINI_API_KEY", "")
-    if not gemini_key:
-        print("Error: GEMINI_API_KEY not found in .env")
-        sys.exit(1)
-
+    # Configure multi-provider router with fallback
     router_cfg = {
-        "primary_provider": "gemini",
-        "gemini_api_key": gemini_key,
+        "primary_provider": os.getenv("LLM_PRIMARY_PROVIDER", "gemini"),
+        "gemini_api_key": os.getenv("GEMINI_API_KEY", ""),
         "gemini_model": os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
-        "openrouter_api_key": "",
-        "groq_api_key": "",
+        "openrouter_api_key": os.getenv("OPENROUTER_API_KEY", ""),
+        "openrouter_model": os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct"),
+        "groq_api_key": os.getenv("GROQ_API_KEY", ""),
+        "groq_model": os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
         "ollama_host": "http://localhost:99999",
     }
 
@@ -103,12 +111,23 @@ def main():
         precaution_map=prec_map,
     )
 
-    print(f"\nStarting evaluation of {len(cases_input)} cases using {results_data['provider']} ({results_data['model']})...\n")
+    print(f"\nStarting evaluation of {len(ordered_cases)} cases (Run order: TC016-TC030 first, then TC001-TC015)...\n")
 
-    for idx, case in enumerate(cases_input):
+    rate_limit_halt = False
+
+    for idx, case in enumerate(ordered_cases):
         cid = case["id"]
         if cid in completed_ids:
-            print(f"[{idx+1}/{len(cases_input)}] {cid}: already completed, skipping.")
+            print(f"[{idx+1}/{len(ordered_cases)}] {cid}: already completed, skipping.")
+            continue
+
+        if rate_limit_halt:
+            print(f"[{idx+1}/{len(ordered_cases)}] Marking {cid} as 'not_run' due to prior provider rate-limit.")
+            results_data["cases"].append({
+                "id": cid,
+                "status": "not_run",
+                "reason": "rate_limit_halt",
+            })
             continue
 
         meta = eval_cases.get(cid, {})
@@ -117,12 +136,13 @@ def main():
             exp_triage = [exp_triage]
         exp_lang = meta.get("expected_language", "English")
 
-        print(f"[{idx+1}/{len(cases_input)}] Running {cid} ({len(case['turns'])} turns)...")
+        print(f"[{idx+1}/{len(ordered_cases)}] Running {cid} ({len(case['turns'])} scripted turns)...")
         bot.reset()
 
         case_record = {
             "id": cid,
-            "turns": case["turns"],
+            "status": "in_progress",
+            "scripted_turns": case["turns"],
             "expected_triage": exp_triage,
             "expected_language": exp_lang,
             "final_triage": None,
@@ -130,17 +150,22 @@ def main():
             "triage_match": False,
             "language_match": False,
             "triage_direction": "n/a",
+            "provider_used": None,
+            "drain_turns_used": 0,
             "error": None,
             "responses": [],
         }
 
-        halt_on_rate_limit = False
+        got_triage = False
+
         try:
+            # Phase 1: Scripted turns
             for turn_idx, turn_text in enumerate(case["turns"]):
                 resp = bot.chat(turn_text)
                 resp_type = resp.get("type", "unknown")
                 case_record["responses"].append({
                     "turn": turn_idx + 1,
+                    "kind": "scripted",
                     "input": turn_text,
                     "type": resp_type,
                     "message": resp.get("message", "")[:200],
@@ -150,74 +175,115 @@ def main():
                     case_record["final_triage"] = "EMERGENCY"
                     user_lang = getattr(bot, "user_language", {}) or {}
                     case_record["final_language"] = user_lang.get("language", "English")
+                    case_record["provider_used"] = "deterministic_emergency"
+                    got_triage = True
                     break
                 elif resp_type == "service_unavailable":
-                    case_record["error"] = "service_unavailable"
-                    halt_on_rate_limit = True
+                    case_record["error"] = "service_unavailable: all providers rate-limited or failed"
+                    case_record["status"] = "not_run"
+                    rate_limit_halt = True
                     break
                 elif resp_type == "answer":
                     case_record["final_triage"] = resp.get("triage", bot.last_triage)
                     user_lang = getattr(bot, "user_language", {}) or {}
                     case_record["final_language"] = resp.get("language") or user_lang.get("language", "English")
+                    case_record["provider_used"] = getattr(bot.router, "_sticky", "unknown") or "unknown"
+                    got_triage = True
                     break
-                elif resp_type == "followup_check":
-                    # Pausing before next turn
-                    time.sleep(DELAY_SECONDS)
-                else:
-                    time.sleep(DELAY_SECONDS)
 
-            if not case_record["final_triage"] and not case_record["error"]:
-                case_record["final_triage"] = bot.last_triage
-                user_lang = getattr(bot, "user_language", {}) or {}
-                case_record["final_language"] = user_lang.get("language", "English")
+                time.sleep(DELAY_SECONDS)
 
-            # Determine triage match & direction
-            act_tr = case_record["final_triage"]
-            if act_tr and act_tr in exp_triage:
-                case_record["triage_match"] = True
-                case_record["triage_direction"] = "correct"
-            elif act_tr and act_tr in TRIAGE_ORDER:
-                min_exp = min(TRIAGE_ORDER[t] for t in exp_triage if t in TRIAGE_ORDER)
-                max_exp = max(TRIAGE_ORDER[t] for t in exp_triage if t in TRIAGE_ORDER)
-                act_val = TRIAGE_ORDER[act_tr]
-                if act_val < min_exp:
-                    case_record["triage_direction"] = "too_low"
-                elif act_val > max_exp:
-                    case_record["triage_direction"] = "too_high"
-                else:
-                    case_record["triage_direction"] = "correct"
-                    case_record["triage_match"] = True
+            # Phase 2: Drain turns if no triage produced yet
+            if not got_triage and not rate_limit_halt:
+                for drain_idx in range(MAX_DRAIN_TURNS):
+                    case_record["drain_turns_used"] = drain_idx + 1
+                    time.sleep(DELAY_SECONDS)
+                    resp = bot.chat(DRAIN_REPLY)
+                    resp_type = resp.get("type", "unknown")
+                    case_record["responses"].append({
+                        "turn": len(case["turns"]) + drain_idx + 1,
+                        "kind": "drain",
+                        "input": DRAIN_REPLY,
+                        "type": resp_type,
+                        "message": resp.get("message", "")[:200],
+                    })
+
+                    if resp_type == "emergency":
+                        case_record["final_triage"] = "EMERGENCY"
+                        user_lang = getattr(bot, "user_language", {}) or {}
+                        case_record["final_language"] = user_lang.get("language", "English")
+                        case_record["provider_used"] = "deterministic_emergency"
+                        got_triage = True
+                        break
+                    elif resp_type == "service_unavailable":
+                        case_record["error"] = "service_unavailable: all providers rate-limited or failed"
+                        case_record["status"] = "not_run"
+                        rate_limit_halt = True
+                        break
+                    elif resp_type == "answer":
+                        case_record["final_triage"] = resp.get("triage", bot.last_triage)
+                        user_lang = getattr(bot, "user_language", {}) or {}
+                        case_record["final_language"] = resp.get("language") or user_lang.get("language", "English")
+                        case_record["provider_used"] = getattr(bot.router, "_sticky", "unknown") or "unknown"
+                        got_triage = True
+                        break
+
+            # Set status and evaluation
+            if rate_limit_halt:
+                case_record["status"] = "not_run"
             else:
-                case_record["triage_direction"] = "error"
+                case_record["status"] = "completed"
+                # If still no triage after drain turns, final_triage remains bot.last_triage or None
+                if not case_record["final_triage"]:
+                    case_record["final_triage"] = bot.last_triage
+                    user_lang = getattr(bot, "user_language", {}) or {}
+                    case_record["final_language"] = user_lang.get("language", "English")
+                    case_record["provider_used"] = getattr(bot.router, "_sticky", "unknown") or "unknown"
 
-            # Determine language match
-            act_lang = case_record["final_language"]
-            if act_lang and act_lang.lower() == exp_lang.lower():
-                case_record["language_match"] = True
+                act_tr = case_record["final_triage"]
+                if act_tr and act_tr in exp_triage:
+                    case_record["triage_match"] = True
+                    case_record["triage_direction"] = "correct"
+                elif act_tr and act_tr in TRIAGE_ORDER:
+                    min_exp = min(TRIAGE_ORDER[t] for t in exp_triage if t in TRIAGE_ORDER)
+                    max_exp = max(TRIAGE_ORDER[t] for t in exp_triage if t in TRIAGE_ORDER)
+                    act_val = TRIAGE_ORDER[act_tr]
+                    if act_val < min_exp:
+                        case_record["triage_direction"] = "too_low"
+                    elif act_val > max_exp:
+                        case_record["triage_direction"] = "too_high"
+                    else:
+                        case_record["triage_direction"] = "correct"
+                        case_record["triage_match"] = True
+                else:
+                    case_record["triage_direction"] = "error"
+                    case_record["triage_match"] = False
+
+                act_lang = case_record["final_language"]
+                if act_lang and act_lang.lower() == exp_lang.lower():
+                    case_record["language_match"] = True
 
         except Exception as e:
             err_msg = f"{type(e).__name__}: {str(e)[:250]}"
             print(f"    ERROR on {cid}: {err_msg}")
             case_record["error"] = err_msg
             if any(term in err_msg.lower() for term in ["rate limit", "429", "quota", "resource_exhausted"]):
-                halt_on_rate_limit = True
+                case_record["status"] = "not_run"
+                rate_limit_halt = True
+            else:
+                case_record["status"] = "provider_error"
 
-        # Append and save per case
         results_data["cases"].append(case_record)
         completed_ids.add(cid)
 
         with open(results_path, "w", encoding="utf-8") as f:
             json.dump(results_data, f, indent=2, ensure_ascii=False)
 
-        print(f"    -> Triage: {case_record['final_triage']} (Expected: {exp_triage}) | Match: {case_record['triage_match']} | Lang: {case_record['final_language']}")
-
-        if halt_on_rate_limit:
-            print("\n⚠️ Rate limit encountered. Saved progress. Halting run to allow resumption later.")
-            break
+        print(f"    -> Status: {case_record['status']} | Provider: {case_record.get('provider_used')} | Triage: {case_record.get('final_triage')} (Exp: {exp_triage}) | Match: {case_record.get('triage_match')} | Drain turns: {case_record.get('drain_turns_used')}")
 
         time.sleep(DELAY_SECONDS)
 
-    print(f"\nEvaluation finished. Total completed cases in {results_path}: {len(results_data['cases'])}")
+    print(f"\nEvaluation loop completed. Results saved to {results_path}.")
 
 
 if __name__ == "__main__":

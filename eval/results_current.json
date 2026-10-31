@@ -1,12 +1,645 @@
 {
   "date": "2026-10-31",
-  "commit": "82af46c",
-  "provider": "gemini",
-  "model": "gemini-3.5-flash-lite",
+  "commit": "908473f",
   "cases": [
     {
+      "id": "TC016",
+      "status": "completed",
+      "scripted_turns": [
+        "I have numbness on the left side of my face and arm that is getting worse over the last hour.",
+        "No injury. It keeps spreading.",
+        "I also feel weak on that side."
+      ],
+      "expected_triage": [
+        "EMERGENCY"
+      ],
+      "expected_language": "English",
+      "final_triage": "EMERGENCY",
+      "final_language": "English",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "gemini",
+      "drain_turns_used": 0,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "I have numbness on the left side of my face and arm that is getting worse over the last hour.",
+          "type": "followup",
+          "message": "Were you doing anything specific right before this numbness started, such as heavy lifting or any unusual physical activity?"
+        },
+        {
+          "turn": 2,
+          "kind": "scripted",
+          "input": "No injury. It keeps spreading.",
+          "type": "followup",
+          "message": "Are you experiencing any other symptoms along with the numbness, such as weakness on that side, difficulty speaking, or vision changes?"
+        },
+        {
+          "turn": 3,
+          "kind": "scripted",
+          "input": "I also feel weak on that side.",
+          "type": "answer",
+          "message": "EMERGENCY: This is a medical emergency that requires immediate care.\n\nIt sounds like you may be experiencing a stroke [6]. \n\nYour sudden numbness and weakness on the left side of your face and arm poi"
+        }
+      ]
+    },
+    {
+      "id": "TC017",
+      "status": "completed",
+      "scripted_turns": [
+        "I suddenly got the worst headache of my life just now.",
+        "It came on in seconds.",
+        "I also feel nauseous."
+      ],
+      "expected_triage": [
+        "EMERGENCY"
+      ],
+      "expected_language": "English",
+      "final_triage": "SEE_DOCTOR",
+      "final_language": "English",
+      "triage_match": false,
+      "language_match": true,
+      "triage_direction": "too_low",
+      "provider_used": "openrouter",
+      "drain_turns_used": 3,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "I suddenly got the worst headache of my life just now.",
+          "type": "followup",
+          "message": "Can you point to where in your head the pain is worst, or does it feel like it's all over?"
+        },
+        {
+          "turn": 2,
+          "kind": "scripted",
+          "input": "It came on in seconds.",
+          "type": "followup",
+          "message": "Did this headache start right after you were straining, lifting something heavy, or doing any intense physical activity?"
+        },
+        {
+          "turn": 3,
+          "kind": "scripted",
+          "input": "I also feel nauseous.",
+          "type": "followup",
+          "message": "Can you point to where in your head the pain is located, or does it feel like it's all over?"
+        },
+        {
+          "turn": 4,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "followup",
+          "message": "Is the pain constant, or does it come and go in waves?"
+        },
+        {
+          "turn": 5,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "followup",
+          "message": "Does the pain feel sharp, throbbing, or more like a heavy pressure?"
+        },
+        {
+          "turn": 6,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "The sudden onset and severity of your headache, along with the nausea, may indicate a serious condition. See a doctor to rule out other conditions."
+        }
+      ]
+    },
+    {
+      "id": "TC018",
+      "status": "completed",
+      "scripted_turns": [
+        "One side of my face is drooping and my arm feels weak since 30 minutes.",
+        "No, nothing else. No other symptoms and no medical conditions."
+      ],
+      "expected_triage": [
+        "EMERGENCY"
+      ],
+      "expected_language": "English",
+      "final_triage": "EMERGENCY",
+      "final_language": "English",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "gemini",
+      "drain_turns_used": 0,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "One side of my face is drooping and my arm feels weak since 30 minutes.",
+          "type": "followup",
+          "message": "Can you also notice any sudden speech changes, like slurring your words or having trouble speaking?"
+        },
+        {
+          "turn": 2,
+          "kind": "scripted",
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "answer",
+          "message": "EMERGENCY: This is a medical emergency requiring immediate help.\n\nIt sounds like a serious medical event involving sudden facial drooping and arm weakness [5].\n\nBecause these symptoms started suddenly"
+        }
+      ]
+    },
+    {
+      "id": "TC019",
+      "status": "completed",
+      "scripted_turns": [
+        "My father has slurred speech and seems confused since a few minutes ago.",
+        "No, nothing else. No other symptoms and no medical conditions."
+      ],
+      "expected_triage": [
+        "EMERGENCY"
+      ],
+      "expected_language": "English",
+      "final_triage": "EMERGENCY",
+      "final_language": "English",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "deterministic_emergency",
+      "drain_turns_used": 0,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "My father has slurred speech and seems confused since a few minutes ago.",
+          "type": "emergency",
+          "message": "MEDICAL EMERGENCY DETECTED\n\nPlease call 112 (India's emergency number) IMMEDIATELY\nor go to the nearest emergency room. In many states you can also call 108 for an ambulance. Do not wait.\n\nYour safety"
+        }
+      ]
+    },
+    {
+      "id": "TC020",
+      "status": "completed",
+      "scripted_turns": [
+        "My brother just had a seizure and is still drowsy.",
+        "No, nothing else. No other symptoms and no medical conditions."
+      ],
+      "expected_triage": [
+        "EMERGENCY"
+      ],
+      "expected_language": "English",
+      "final_triage": "EMERGENCY",
+      "final_language": "English",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "deterministic_emergency",
+      "drain_turns_used": 0,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "My brother just had a seizure and is still drowsy.",
+          "type": "emergency",
+          "message": "MEDICAL EMERGENCY DETECTED\n\nPlease call 112 (India's emergency number) IMMEDIATELY\nor go to the nearest emergency room. In many states you can also call 108 for an ambulance. Do not wait.\n\nYour safety"
+        }
+      ]
+    },
+    {
+      "id": "TC021",
+      "status": "completed",
+      "scripted_turns": [
+        "I suddenly lost vision in one eye a few minutes ago.",
+        "No, nothing else. No other symptoms and no medical conditions."
+      ],
+      "expected_triage": [
+        "EMERGENCY"
+      ],
+      "expected_language": "English",
+      "final_triage": "EMERGENCY",
+      "final_language": "English",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "openrouter",
+      "drain_turns_used": 2,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "I suddenly lost vision in one eye a few minutes ago.",
+          "type": "followup",
+          "message": "Did you experience any other symptoms right before or along with this vision loss, such as flashes of light, floaters, a shadow moving across your vision, or any headache?"
+        },
+        {
+          "turn": 2,
+          "kind": "scripted",
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "followup",
+          "message": "Is your vision completely dark in that eye, or can you still see shadows, light, or a blurry part of your field of view?"
+        },
+        {
+          "turn": 3,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "followup",
+          "message": "Were you doing anything specific physically right before this vision loss started, such as heavy lifting, bending over, or strenuous activity?"
+        },
+        {
+          "turn": 4,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "Sudden vision loss could be related to age-related eye diseases like macular degeneration, cataracts, or glaucoma. It's essential to consult a doctor for a proper diagnosis and treatment."
+        }
+      ]
+    },
+    {
+      "id": "TC022",
+      "status": "completed",
+      "scripted_turns": [
+        "I feel very dizzy and cannot keep my balance, I keep falling to one side.",
+        "No, nothing else. No other symptoms and no medical conditions."
+      ],
+      "expected_triage": [
+        "EMERGENCY"
+      ],
+      "expected_language": "English",
+      "final_triage": "SEE_DOCTOR",
+      "final_language": "English",
+      "triage_match": false,
+      "language_match": true,
+      "triage_direction": "too_low",
+      "provider_used": "gemini",
+      "drain_turns_used": 1,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "I feel very dizzy and cannot keep my balance, I keep falling to one side.",
+          "type": "followup",
+          "message": "When did you first notice this dizziness starting, and were you doing anything specific right before it began?"
+        },
+        {
+          "turn": 2,
+          "kind": "scripted",
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "followup",
+          "message": "Does this feeling of dizziness come and go in episodes, or has it been constant since it started?"
+        },
+        {
+          "turn": 3,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "It sounds like you may have a balance problem [2]. \n\nYour sudden dizziness and falling to one side point towards this issue [2]. \n\nI am not fully sure of the exact underlying cause of your symptoms. \n"
+        }
+      ]
+    },
+    {
+      "id": "TC023",
+      "status": "completed",
+      "scripted_turns": [
+        "I have a high fever and a very stiff neck since this morning.",
+        "Bright light hurts my eyes.",
+        "I also have a bad headache."
+      ],
+      "expected_triage": [
+        "EMERGENCY"
+      ],
+      "expected_language": "English",
+      "final_triage": "EMERGENCY",
+      "final_language": "English",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "gemini",
+      "drain_turns_used": 1,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "I have a high fever and a very stiff neck since this morning.",
+          "type": "followup",
+          "message": "Are you experiencing any other symptoms along with your fever and stiff neck, such as a severe headache, sensitivity to bright lights, or feeling unusually confused or drowsy?"
+        },
+        {
+          "turn": 2,
+          "kind": "scripted",
+          "input": "Bright light hurts my eyes.",
+          "type": "followup",
+          "message": "Have you noticed any severe headache or changes in your alertness, such as feeling unusually confused or drowsy?"
+        },
+        {
+          "turn": 3,
+          "kind": "scripted",
+          "input": "I also have a bad headache.",
+          "type": "followup",
+          "message": "Have you noticed any changes in your alertness or mental state, such as feeling unusually confused, drowsy, or having any trouble staying awake?"
+        },
+        {
+          "turn": 4,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "⚠️ EMERGENCY: This is a medical emergency. Please go to the nearest hospital emergency room right away.\n\nIt sounds like a serious neurological disorder or infection [1][2]. Your high fever, stiff neck"
+        }
+      ]
+    },
+    {
+      "id": "TC024",
+      "status": "completed",
+      "scripted_turns": [
+        "I have crushing chest pain spreading to my left arm."
+      ],
+      "expected_triage": [
+        "EMERGENCY"
+      ],
+      "expected_language": "English",
+      "final_triage": "EMERGENCY",
+      "final_language": "English",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "deterministic_emergency",
+      "drain_turns_used": 0,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "I have crushing chest pain spreading to my left arm.",
+          "type": "emergency",
+          "message": "MEDICAL EMERGENCY DETECTED\n\nPlease call 112 (India's emergency number) IMMEDIATELY\nor go to the nearest emergency room. In many states you can also call 108 for an ambulance. Do not wait.\n\nYour safety"
+        }
+      ]
+    },
+    {
+      "id": "TC025",
+      "status": "completed",
+      "scripted_turns": [
+        "I have chest pain and I am struggling to breathe."
+      ],
+      "expected_triage": [
+        "EMERGENCY"
+      ],
+      "expected_language": "English",
+      "final_triage": "EMERGENCY",
+      "final_language": "English",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "deterministic_emergency",
+      "drain_turns_used": 0,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "I have chest pain and I am struggling to breathe.",
+          "type": "emergency",
+          "message": "MEDICAL EMERGENCY DETECTED\n\nPlease call 112 (India's emergency number) IMMEDIATELY\nor go to the nearest emergency room. In many states you can also call 108 for an ambulance. Do not wait.\n\nYour safety"
+        }
+      ]
+    },
+    {
+      "id": "TC026",
+      "status": "completed",
+      "scripted_turns": [
+        "My heart is racing and I fainted a few minutes ago.",
+        "It is still racing.",
+        "I feel very weak."
+      ],
+      "expected_triage": [
+        "EMERGENCY"
+      ],
+      "expected_language": "English",
+      "final_triage": "EMERGENCY",
+      "final_language": "English",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "openrouter",
+      "drain_turns_used": 1,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "My heart is racing and I fainted a few minutes ago.",
+          "type": "followup",
+          "message": "What were you doing right before your heart started racing and you fainted?"
+        },
+        {
+          "turn": 2,
+          "kind": "scripted",
+          "input": "It is still racing.",
+          "type": "followup",
+          "message": "Are you experiencing any other symptoms right now, such as chest pain, shortness of breath, or dizziness?"
+        },
+        {
+          "turn": 3,
+          "kind": "scripted",
+          "input": "I feel very weak.",
+          "type": "followup",
+          "message": "On a scale from 1 to 10, how severe is the racing feeling right now, and is anything at all helping it calm down?"
+        },
+        {
+          "turn": 4,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "You may have a serious heart condition. Fainting and racing heartbeat can be related to heart problems. See a healthcare provider for proper evaluation."
+        }
+      ]
+    },
+    {
+      "id": "TC027",
+      "status": "completed",
+      "scripted_turns": [
+        "I am short of breath even while sitting at rest.",
+        "It started suddenly an hour ago.",
+        "I cannot speak full sentences."
+      ],
+      "expected_triage": [
+        "EMERGENCY"
+      ],
+      "expected_language": "English",
+      "final_triage": "EMERGENCY",
+      "final_language": "English",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "gemini",
+      "drain_turns_used": 0,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "I am short of breath even while sitting at rest.",
+          "type": "followup",
+          "message": "Did you do any heavy lifting, physical work, or unusual activity right before this shortness of breath started?"
+        },
+        {
+          "turn": 2,
+          "kind": "scripted",
+          "input": "It started suddenly an hour ago.",
+          "type": "followup",
+          "message": "Are you experiencing any other symptoms along with this shortness of breath, such as chest pain, dizziness, or a fast heartbeat?"
+        },
+        {
+          "turn": 3,
+          "kind": "scripted",
+          "input": "I cannot speak full sentences.",
+          "type": "answer",
+          "message": "EMERGENCY: Seek immediate medical help right away. \n\nIt sounds like severe heart failure or a sudden lung problem [4][6]. \nYour sudden trouble breathing at rest and inability to speak full sentences p"
+        }
+      ]
+    },
+    {
+      "id": "TC028",
+      "status": "completed",
+      "scripted_turns": [
+        "My legs are swollen for a week and I get breathless when I walk.",
+        "No, nothing else. No other symptoms and no medical conditions.",
+        "I have no chest pain and I can lie flat comfortably."
+      ],
+      "expected_triage": [
+        "SEE_DOCTOR"
+      ],
+      "expected_language": "English",
+      "final_triage": "SEE_DOCTOR",
+      "final_language": "English",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "openrouter",
+      "drain_turns_used": 2,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "My legs are swollen for a week and I get breathless when I walk.",
+          "type": "followup",
+          "message": "Before this swelling and breathlessness started, did you recently do any heavy lifting, long travel, intense exercise, or any unusual physical activity?"
+        },
+        {
+          "turn": 2,
+          "kind": "scripted",
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "followup",
+          "message": "Does the swelling pit or leave an indentation when you press on your skin, and does it seem worse at the end of the day?"
+        },
+        {
+          "turn": 3,
+          "kind": "scripted",
+          "input": "I have no chest pain and I can lie flat comfortably.",
+          "type": "followup",
+          "message": "Does the swelling affect both legs equally, or is one leg noticeably larger than the other?"
+        },
+        {
+          "turn": 4,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "followup",
+          "message": "Have you noticed any rapid changes in your weight, or does the breathlessness ever wake you up at night?"
+        },
+        {
+          "turn": 5,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "You may have Peripheral Arterial Disease (P.A.D.), which can cause leg symptoms and breathlessness when walking. I'm not fully sure, as some details are missing. Please see a doctor soon."
+        }
+      ]
+    },
+    {
+      "id": "TC029",
+      "status": "completed",
+      "scripted_turns": [
+        "मुझे सीने में तेज़ दर्द हो रहा है और पसीना आ रहा है।",
+        "हाँ, दर्द बाएँ हाथ में भी जा रहा है।"
+      ],
+      "expected_triage": [
+        "EMERGENCY"
+      ],
+      "expected_language": "Hindi",
+      "final_triage": "EMERGENCY",
+      "final_language": "Hindi",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "gemini",
+      "drain_turns_used": 0,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "मुझे सीने में तेज़ दर्द हो रहा है और पसीना आ रहा है।",
+          "type": "followup",
+          "message": "क्या यह दर्द आपकी बांह, गर्दन, या पीठ की तरफ भी फैल रहा है?"
+        },
+        {
+          "turn": 2,
+          "kind": "scripted",
+          "input": "हाँ, दर्द बाएँ हाथ में भी जा रहा है।",
+          "type": "answer",
+          "message": "⚠️ यह एक गंभीर आपातकालीन स्थिति हो सकती है, तुरंत डॉक्टर के पास जाएं या एम्बुलेंस को कॉल करें।\n\nयह दिल का दौरा (Heart Attack) या सीने की गंभीर समस्या हो सकती है [1]. आपके सीने में तेज़ दर्द और पसीना आ"
+        }
+      ]
+    },
+    {
+      "id": "TC030",
+      "status": "completed",
+      "scripted_turns": [
+        "I have jaw pain and I am sweating a lot, and I feel uneasy."
+      ],
+      "expected_triage": [
+        "EMERGENCY"
+      ],
+      "expected_language": "English",
+      "final_triage": "SEE_DOCTOR",
+      "final_language": "English",
+      "triage_match": false,
+      "language_match": true,
+      "triage_direction": "too_low",
+      "provider_used": "openrouter",
+      "drain_turns_used": 2,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "I have jaw pain and I am sweating a lot, and I feel uneasy.",
+          "type": "followup",
+          "message": "Does the jaw pain or uneasy feeling spread anywhere else, like to your chest, neck, or left arm?"
+        },
+        {
+          "turn": 2,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "followup",
+          "message": "When did this jaw pain and sweating first start, and did it come on suddenly or gradually?"
+        },
+        {
+          "turn": 3,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "You likely have Temporomandibular Joint Dysfunction, with jaw pain being a key symptom. The cause of your sweating is uncertain, but it may be related to the jaw pain or another condition, such as a h"
+        }
+      ]
+    },
+    {
       "id": "TC001",
-      "turns": [
+      "status": "completed",
+      "scripted_turns": [
         "I have a mild headache since this morning.",
         "No, nothing else. No other symptoms and no medical conditions."
       ],
@@ -15,30 +648,42 @@
         "SEE_DOCTOR"
       ],
       "expected_language": "English",
-      "final_triage": null,
+      "final_triage": "SELF_CARE",
       "final_language": "English",
-      "triage_match": false,
+      "triage_match": true,
       "language_match": true,
-      "triage_direction": "error",
+      "triage_direction": "correct",
+      "provider_used": "gemini",
+      "drain_turns_used": 1,
       "error": null,
       "responses": [
         {
           "turn": 1,
+          "kind": "scripted",
           "input": "I have a mild headache since this morning.",
           "type": "followup",
-          "message": "Whereabouts in your head are you feeling the pain—like all over, or more in your forehead, temples, or the back of your head?"
+          "message": "Where exactly do you feel the headache — is it all over, or concentrated in a specific area like your forehead or temples?"
         },
         {
           "turn": 2,
+          "kind": "scripted",
           "input": "No, nothing else. No other symptoms and no medical conditions.",
           "type": "followup",
-          "message": "Does the headache feel more dull and achy, or is it sharp, throbbing, or pressure-like?"
+          "message": "How would you describe the feeling of the headache — is it a dull ache, sharp, throbbing, or more like a tight band around your head?"
+        },
+        {
+          "turn": 3,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "It sounds like you have a tension headache [5]. Your mild headache starting this morning points to this common condition [5]. I am not fully sure because I do not know how long it will last or if it c"
         }
       ]
     },
     {
       "id": "TC002",
-      "turns": [
+      "status": "completed",
+      "scripted_turns": [
         "I have a runny nose, sneezing and a mild sore throat for two days.",
         "No, nothing else. No other symptoms and no medical conditions."
       ],
@@ -51,25 +696,37 @@
       "triage_match": false,
       "language_match": true,
       "triage_direction": "too_high",
+      "provider_used": "openrouter",
+      "drain_turns_used": 1,
       "error": null,
       "responses": [
         {
           "turn": 1,
+          "kind": "scripted",
           "input": "I have a runny nose, sneezing and a mild sore throat for two days.",
           "type": "followup",
-          "message": "Have you developed any other symptoms like a fever, body aches, or a cough along with your runny nose and sore throat?"
+          "message": "Have you developed a fever, body aches, or any other symptoms along with your runny nose and sore throat?"
         },
         {
           "turn": 2,
+          "kind": "scripted",
           "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "followup",
+          "message": "Are your symptoms getting progressively worse, or do they seem to be staying about the same since they started two days ago?"
+        },
+        {
+          "turn": 3,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
           "type": "answer",
-          "message": "⚠️ Some of your symptoms are serious. Please see a doctor soon or go to an emergency room if symptoms are severe.\n\nIt sounds like you most likely have a common cold [1]. \n\nYour runny nose, sneezing, a"
+          "message": "You likely have a common cold, a viral infection of the upper respiratory tract. Typical symptoms include a runny nose and sneezing. To confirm the diagnosis and receive guidance, it is recommended th"
         }
       ]
     },
     {
       "id": "TC003",
-      "turns": [
+      "status": "completed",
+      "scripted_turns": [
         "I have a mild stomach ache after eating lunch today.",
         "No, nothing else. No other symptoms and no medical conditions."
       ],
@@ -78,30 +735,42 @@
         "SEE_DOCTOR"
       ],
       "expected_language": "English",
-      "final_triage": null,
+      "final_triage": "SELF_CARE",
       "final_language": "English",
-      "triage_match": false,
+      "triage_match": true,
       "language_match": true,
-      "triage_direction": "error",
+      "triage_direction": "correct",
+      "provider_used": "gemini",
+      "drain_turns_used": 1,
       "error": null,
       "responses": [
         {
           "turn": 1,
+          "kind": "scripted",
           "input": "I have a mild stomach ache after eating lunch today.",
           "type": "followup",
-          "message": "Can you describe what the stomach ache feels like — is it sharp, dull, cramping, or burning?"
+          "message": "Can you describe what the ache feels like — is it a sharp pain, a dull cramp, or a burning sensation?"
         },
         {
           "turn": 2,
+          "kind": "scripted",
           "input": "No, nothing else. No other symptoms and no medical conditions.",
           "type": "followup",
           "message": "Does the discomfort stay right in one spot, or does it seem to spread anywhere else?"
+        },
+        {
+          "turn": 3,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "It sounds like you have mild indigestion from your food [5]. Your stomach ache started right after eating lunch today [5]. I am not fully sure if this is simple indigestion or mild stomach inflammatio"
         }
       ]
     },
     {
       "id": "TC004",
-      "turns": [
+      "status": "completed",
+      "scripted_turns": [
         "I have mild lower back pain after exercising yesterday.",
         "No, nothing else. No other symptoms and no medical conditions."
       ],
@@ -110,30 +779,56 @@
         "SEE_DOCTOR"
       ],
       "expected_language": "English",
-      "final_triage": null,
+      "final_triage": "SELF_CARE",
       "final_language": "English",
-      "triage_match": false,
+      "triage_match": true,
       "language_match": true,
-      "triage_direction": "error",
+      "triage_direction": "correct",
+      "provider_used": "gemini",
+      "drain_turns_used": 3,
       "error": null,
       "responses": [
         {
           "turn": 1,
+          "kind": "scripted",
           "input": "I have mild lower back pain after exercising yesterday.",
           "type": "followup",
-          "message": "What specific exercises or movements were you doing yesterday before your back started hurting?"
+          "message": "What specific type of exercise were you doing when you noticed the pain start?"
         },
         {
           "turn": 2,
+          "kind": "scripted",
           "input": "No, nothing else. No other symptoms and no medical conditions.",
           "type": "followup",
-          "message": "Does the pain stay right in your lower back, or does it travel down into your legs or buttocks?"
+          "message": "Does the pain stay right in your lower back, or does it seem to spread down into your legs or anywhere else?"
+        },
+        {
+          "turn": 3,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "followup",
+          "message": "Does moving in certain ways, such as bending forward or twisting, tend to make the pain worse?"
+        },
+        {
+          "turn": 4,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "followup",
+          "message": "Does resting or lying down help ease the discomfort at all?"
+        },
+        {
+          "turn": 5,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "You likely have a lower back muscle strain, though it is not yet entirely certain whether this is a simple strain or a slipped disc. To help manage the discomfort, try taking gentle walks and avoid pr"
         }
       ]
     },
     {
       "id": "TC005",
-      "turns": [
+      "status": "completed",
+      "scripted_turns": [
         "I have a mild fever of 99.5 F since last night.",
         "No, nothing else. No other symptoms and no medical conditions.",
         "No cough or breathing problems."
@@ -147,25 +842,30 @@
       "triage_match": false,
       "language_match": true,
       "triage_direction": "too_high",
+      "provider_used": "openrouter",
+      "drain_turns_used": 0,
       "error": null,
       "responses": [
         {
           "turn": 1,
+          "kind": "scripted",
           "input": "I have a mild fever of 99.5 F since last night.",
           "type": "followup",
-          "message": "Are you experiencing any other symptoms along with the fever, such as chills, a cough, or body aches?"
+          "message": "Are you experiencing any other symptoms along with the fever, such as a cough, chills, or body aches?"
         },
         {
           "turn": 2,
+          "kind": "scripted",
           "input": "No, nothing else. No other symptoms and no medical conditions.",
           "type": "answer",
-          "message": "You are experiencing a mild fever of unknown origin that began last night at 99.5°F without any other symptoms. Because there are no other complaints, the exact cause is unclear. For now, rest at home"
+          "message": "I'm not fully sure what's causing your mild fever [5]. It could be due to various reasons, including infections [1]. I recommend consulting a doctor to determine the cause and appropriate treatment. P"
         }
       ]
     },
     {
       "id": "TC006",
-      "turns": [
+      "status": "completed",
+      "scripted_turns": [
         "I have been constipated for three days.",
         "No, nothing else. No other symptoms and no medical conditions."
       ],
@@ -174,30 +874,42 @@
         "SEE_DOCTOR"
       ],
       "expected_language": "English",
-      "final_triage": null,
+      "final_triage": "SEE_DOCTOR",
       "final_language": "English",
-      "triage_match": false,
+      "triage_match": true,
       "language_match": true,
-      "triage_direction": "error",
+      "triage_direction": "correct",
+      "provider_used": "gemini",
+      "drain_turns_used": 1,
       "error": null,
       "responses": [
         {
           "turn": 1,
+          "kind": "scripted",
           "input": "I have been constipated for three days.",
           "type": "followup",
-          "message": "Are you experiencing any other symptoms along with the constipation, such as abdominal pain, cramping, or bloating?"
+          "message": "Have you noticed any other symptoms along with the constipation, such as abdominal pain, bloating, or nausea?"
         },
         {
           "turn": 2,
+          "kind": "scripted",
           "input": "No, nothing else. No other symptoms and no medical conditions.",
           "type": "followup",
           "message": "Have you made any recent changes to your diet, fluid intake, or daily routine around the time this started?"
+        },
+        {
+          "turn": 3,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "It sounds like you are experiencing simple constipation since you have not been able to pass stools for three days [6]. Your specific symptom of constipation without any other warning signs points tow"
         }
       ]
     },
     {
       "id": "TC007",
-      "turns": [
+      "status": "completed",
+      "scripted_turns": [
         "I have a small mild itchy skin rash on my forearm since yesterday.",
         "No, nothing else. No other symptoms and no medical conditions."
       ],
@@ -206,30 +918,35 @@
         "SEE_DOCTOR"
       ],
       "expected_language": "English",
-      "final_triage": null,
+      "final_triage": "SELF_CARE",
       "final_language": "English",
-      "triage_match": false,
+      "triage_match": true,
       "language_match": true,
-      "triage_direction": "error",
+      "triage_direction": "correct",
+      "provider_used": "openrouter",
+      "drain_turns_used": 0,
       "error": null,
       "responses": [
         {
           "turn": 1,
+          "kind": "scripted",
           "input": "I have a small mild itchy skin rash on my forearm since yesterday.",
           "type": "followup",
-          "message": "Did you happen to come into contact with any new soaps, plants, chemicals, or animals just before the rash appeared?"
+          "message": "What were you doing right before you first noticed the rash, or were you in contact with any new soaps, plants, or chemicals?"
         },
         {
           "turn": 2,
+          "kind": "scripted",
           "input": "No, nothing else. No other symptoms and no medical conditions.",
-          "type": "followup",
-          "message": "Does the rash seem to be spreading anywhere else, or has it changed in appearance since yesterday?"
+          "type": "answer",
+          "message": "You likely have a mild allergic reaction or skin irritation, given the small, itchy skin rash on your forearm. The exact cause is uncertain, as various triggers are possible. To care for the rash, app"
         }
       ]
     },
     {
       "id": "TC008",
-      "turns": [
+      "status": "completed",
+      "scripted_turns": [
         "I have a dry cough for three days.",
         "No, nothing else. No other symptoms and no medical conditions.",
         "No fever and no breathlessness."
@@ -238,36 +955,49 @@
         "SELF_CARE"
       ],
       "expected_language": "English",
-      "final_triage": null,
+      "final_triage": "SELF_CARE",
       "final_language": "English",
-      "triage_match": false,
+      "triage_match": true,
       "language_match": true,
-      "triage_direction": "error",
+      "triage_direction": "correct",
+      "provider_used": "gemini",
+      "drain_turns_used": 1,
       "error": null,
       "responses": [
         {
           "turn": 1,
+          "kind": "scripted",
           "input": "I have a dry cough for three days.",
           "type": "followup",
-          "message": "Are you experiencing any other symptoms along with the dry cough, such as a fever, shortness of breath, or a sore throat?"
+          "message": "Have you noticed any other symptoms coming along with this dry cough, such as a fever, shortness of breath, or a sore throat?"
         },
         {
           "turn": 2,
+          "kind": "scripted",
           "input": "No, nothing else. No other symptoms and no medical conditions.",
           "type": "followup",
-          "message": "Is the cough constant throughout the day, or does it tend to come and go in bouts?"
+          "message": "Is the cough getting progressively worse over these three days, or does it tend to come and go?"
         },
         {
           "turn": 3,
+          "kind": "scripted",
           "input": "No fever and no breathlessness.",
           "type": "followup",
-          "message": "Does anything specific seem to trigger the cough, such as dust, cold air, or lying down at night?"
+          "message": "Does anything specific seem to trigger the cough, or make it noticeably better or worse, such as cold air or lying down?"
+        },
+        {
+          "turn": 4,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "Your dry cough, which started three days ago, points to a common cold. This sounds like a mild issue. For now, you should rest at home and drink plenty of warm fluids."
         }
       ]
     },
     {
       "id": "TC009",
-      "turns": [
+      "status": "completed",
+      "scripted_turns": [
         "I get acidity and heartburn after meals almost every day this week.",
         "No, nothing else. No other symptoms and no medical conditions."
       ],
@@ -275,30 +1005,42 @@
         "SEE_DOCTOR"
       ],
       "expected_language": "English",
-      "final_triage": null,
+      "final_triage": "SEE_DOCTOR",
       "final_language": "English",
-      "triage_match": false,
+      "triage_match": true,
       "language_match": true,
-      "triage_direction": "error",
+      "triage_direction": "correct",
+      "provider_used": "openrouter",
+      "drain_turns_used": 1,
       "error": null,
       "responses": [
         {
           "turn": 1,
+          "kind": "scripted",
           "input": "I get acidity and heartburn after meals almost every day this week.",
           "type": "followup",
-          "message": "Does anything specific seem to trigger the heartburn or make it worse, such as certain types of food, bending over, or lying down right after eating?"
+          "message": "Does this burning sensation tend to travel up towards your chest or throat, or does it stay mainly in your upper stomach?"
         },
         {
           "turn": 2,
+          "kind": "scripted",
           "input": "No, nothing else. No other symptoms and no medical conditions.",
           "type": "followup",
-          "message": "Have you tried taking any over-the-counter medications or remedies for the heartburn, and do they help?"
+          "message": "On a scale of 1 to 10, how much is this heartburn affecting your daily activities or comfort?"
+        },
+        {
+          "turn": 3,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "You likely have Gastroesophageal reflux disease (GERD) due to frequent acidity and heartburn after meals. These daily symptoms point to this condition. However, a proper diagnosis and treatment requir"
         }
       ]
     },
     {
       "id": "TC010",
-      "turns": [
+      "status": "completed",
+      "scripted_turns": [
         "My eyes feel strained and tired after long hours on the computer screen.",
         "No, nothing else. No other symptoms and no medical conditions."
       ],
@@ -306,30 +1048,49 @@
         "SELF_CARE"
       ],
       "expected_language": "English",
-      "final_triage": null,
+      "final_triage": "SEE_DOCTOR",
       "final_language": "English",
       "triage_match": false,
       "language_match": true,
-      "triage_direction": "error",
+      "triage_direction": "too_high",
+      "provider_used": "openrouter",
+      "drain_turns_used": 2,
       "error": null,
       "responses": [
         {
           "turn": 1,
+          "kind": "scripted",
           "input": "My eyes feel strained and tired after long hours on the computer screen.",
           "type": "followup",
-          "message": "Do you notice any other symptoms when your eyes feel strained, such as headaches, dryness, or blurry vision?"
+          "message": "Do you notice any other symptoms when this happens, such as headaches, blurred vision, or dry eyes?"
         },
         {
           "turn": 2,
+          "kind": "scripted",
           "input": "No, nothing else. No other symptoms and no medical conditions.",
           "type": "followup",
-          "message": "Does resting your eyes or stepping away from the screen help make the strain better?"
+          "message": "Do these tired and strained feelings start gradually after you begin working, or do they come on quite quickly?"
+        },
+        {
+          "turn": 3,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "followup",
+          "message": "Does taking a break from the screen or resting your eyes help relieve the strain at all?"
+        },
+        {
+          "turn": 4,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "Poor eye care might be a factor. See a doctor for an eye check."
         }
       ]
     },
     {
       "id": "TC011",
-      "turns": [
+      "status": "completed",
+      "scripted_turns": [
         "I got a muscle cramp in my calf last night, it is fine now.",
         "No, nothing else. No other symptoms and no medical conditions."
       ],
@@ -342,25 +1103,30 @@
       "triage_match": true,
       "language_match": true,
       "triage_direction": "correct",
+      "provider_used": "gemini",
+      "drain_turns_used": 0,
       "error": null,
       "responses": [
         {
           "turn": 1,
+          "kind": "scripted",
           "input": "I got a muscle cramp in my calf last night, it is fine now.",
           "type": "followup",
-          "message": "Were you doing any unusual physical activity, heavy lifting, or strenuous exercise right before the cramp started?"
+          "message": "Were you doing any unusual physical activity, heavy lifting, or exercising before the cramp started?"
         },
         {
           "turn": 2,
+          "kind": "scripted",
           "input": "No, nothing else. No other symptoms and no medical conditions.",
           "type": "answer",
-          "message": "It sounds like you most likely had a common leg cramp [1]. \n\nThe sudden tightening in your calf muscle last night points to this harmless spasm [1]. \n\nMost cramps happen at night and go away on their "
+          "message": "The tight pain in your calf last night sounds like a normal leg cramp. These cramps are very common and usually harmless. To help keep your muscles relaxed, try doing gentle calf stretches. \n\n*Please "
         }
       ]
     },
     {
       "id": "TC012",
-      "turns": [
+      "status": "completed",
+      "scripted_turns": [
         "I feel mildly anxious before my exam next week.",
         "No, nothing else. No other symptoms and no medical conditions.",
         "Sleeping and eating are normal. I do not feel unsafe."
@@ -370,24 +1136,159 @@
         "SEE_DOCTOR"
       ],
       "expected_language": "English",
-      "final_triage": null,
-      "final_language": null,
-      "triage_match": false,
-      "language_match": false,
-      "triage_direction": "error",
-      "error": "service_unavailable",
+      "final_triage": "SELF_CARE",
+      "final_language": "English",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "openrouter",
+      "drain_turns_used": 0,
+      "error": null,
       "responses": [
         {
           "turn": 1,
+          "kind": "scripted",
           "input": "I feel mildly anxious before my exam next week.",
           "type": "followup",
-          "message": "Are you noticing any physical symptoms when you feel this anxiety, such as a racing heart, trouble sleeping, or stomach upset?"
+          "message": "Aside from the anxious feeling, are you noticing any physical symptoms like a racing heart, trouble sleeping, or stomach upset?"
         },
         {
           "turn": 2,
+          "kind": "scripted",
           "input": "No, nothing else. No other symptoms and no medical conditions.",
-          "type": "service_unavailable",
-          "message": "I apologize, but I cannot assess your symptoms right now because our clinical assessment services are temporarily unavailable.\n\nEMERGENCY GUIDANCE:\nIf you are experiencing any of the following emergen"
+          "type": "answer",
+          "message": "It sounds like normal situational anxiety before your upcoming test [2][4]. \n\nYour mild worry specifically tied to the exam next week points directly to this temporary stress [2][4]. \n\nI am not fully "
+        }
+      ]
+    },
+    {
+      "id": "TC013",
+      "status": "completed",
+      "scripted_turns": [
+        "I have mild loose motions since this morning, three times today.",
+        "No, nothing else. No other symptoms and no medical conditions."
+      ],
+      "expected_triage": [
+        "SEE_DOCTOR"
+      ],
+      "expected_language": "English",
+      "final_triage": "SEE_DOCTOR",
+      "final_language": "English",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "gemini",
+      "drain_turns_used": 1,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "I have mild loose motions since this morning, three times today.",
+          "type": "followup",
+          "message": "Have you noticed any other symptoms along with the loose motions, such as abdominal cramps, fever, or nausea?"
+        },
+        {
+          "turn": 2,
+          "kind": "scripted",
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "followup",
+          "message": "Have you eaten anything unusual or tried any new foods before the loose motions started today?"
+        },
+        {
+          "turn": 3,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "While the context does not provide a clear answer specifically tailored to your exact situation, it is important that you drink plenty of fluids to stay properly hydrated right now."
+        }
+      ]
+    },
+    {
+      "id": "TC014",
+      "status": "completed",
+      "scripted_turns": [
+        "मेरे घुटने में हल्का दर्द है, दो दिन से, सीढ़ियाँ चढ़ते समय ज़्यादा होता है।",
+        "नहीं, और कोई तकलीफ़ नहीं है।"
+      ],
+      "expected_triage": [
+        "SELF_CARE",
+        "SEE_DOCTOR"
+      ],
+      "expected_language": "Hindi",
+      "final_triage": "SEE_DOCTOR",
+      "final_language": "Hindi",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "gemini",
+      "drain_turns_used": 1,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "मेरे घुटने में हल्का दर्द है, दो दिन से, सीढ़ियाँ चढ़ते समय ज़्यादा होता है।",
+          "type": "followup",
+          "message": "क्या यह दर्द शुरू होने से पहले आपने कोई भारी सामान उठाया था, दौड़ लगाई थी या कोई अन्य शारीरिक गतिविधि की थी?"
+        },
+        {
+          "turn": 2,
+          "kind": "scripted",
+          "input": "नहीं, और कोई तकलीफ़ नहीं है।",
+          "type": "followup",
+          "message": "क्या यह दर्द समय के साथ बढ़ रहा है, या आराम करने पर कम हो जाता है?"
+        },
+        {
+          "turn": 3,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "इट्स साउंड लाइक (It sounds like) आपको घुटने की कोई हल्की समस्या या चोट हो सकती है [3]। आपके पिछले दो दिनों के हल्के दर्द और सीढ़ियाँ चढ़ते समय इसके बढ़ने से ऐसा लगता है [3]। मैं पूरी तरह से आश्वस्त नह"
+        }
+      ]
+    },
+    {
+      "id": "TC015",
+      "status": "completed",
+      "scripted_turns": [
+        "నాకు రెండు రోజులుగా తేలికపాటి తలనొప్పి ఉంది.",
+        "లేదు, ఇంకా ఏ ఇబ్బంది లేదు."
+      ],
+      "expected_triage": [
+        "SELF_CARE",
+        "SEE_DOCTOR"
+      ],
+      "expected_language": "Telugu",
+      "final_triage": "SELF_CARE",
+      "final_language": "Telugu",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "provider_used": "gemini",
+      "drain_turns_used": 1,
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "kind": "scripted",
+          "input": "నాకు రెండు రోజులుగా తేలికపాటి తలనొప్పి ఉంది.",
+          "type": "followup",
+          "message": "ఈ తలనొప్పి మీ తలలో ఏ భాగంలో ఎక్కువగా అనిపిస్తుంది - ముందు భాగంలోనా, వెనుక భాగంలోనా లేదా రెండు వైపులా?"
+        },
+        {
+          "turn": 2,
+          "kind": "scripted",
+          "input": "లేదు, ఇంకా ఏ ఇబ్బంది లేదు.",
+          "type": "followup",
+          "message": "ఈ తలనొప్పి రోజంతా అలాగే ఉంటోందా లేదా ഇടയ്ക്കിടയ്ക്ക് (మధ్య మధ్యలో) వస్తూ పోతుందా?"
+        },
+        {
+          "turn": 3,
+          "kind": "drain",
+          "input": "No, that is all I can tell you.",
+          "type": "answer",
+          "message": "ఇది టెన్షన్ తలనొప్పి అయి ఉండే అవకాశం ఉంది. అన్ని తలనొప్పులకు వెంటనే డాక్టర్ వద్దకు వెళ్లాల్సిన అవసరం లేదు. కాబట్టి, ప్రస్తుతం మీరు ఇంట్లోనే విశ్రాంతి తీసుకోండి. \n\nగమనిక: ఈ సమాచారం కేవలం అవగాహన కొరకు మ"
         }
       ]
     }

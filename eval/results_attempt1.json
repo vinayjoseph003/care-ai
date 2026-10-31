@@ -1,0 +1,395 @@
+{
+  "date": "2026-10-31",
+  "commit": "82af46c",
+  "provider": "gemini",
+  "model": "gemini-3.5-flash-lite",
+  "cases": [
+    {
+      "id": "TC001",
+      "turns": [
+        "I have a mild headache since this morning.",
+        "No, nothing else. No other symptoms and no medical conditions."
+      ],
+      "expected_triage": [
+        "SELF_CARE",
+        "SEE_DOCTOR"
+      ],
+      "expected_language": "English",
+      "final_triage": null,
+      "final_language": "English",
+      "triage_match": false,
+      "language_match": true,
+      "triage_direction": "error",
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "input": "I have a mild headache since this morning.",
+          "type": "followup",
+          "message": "Whereabouts in your head are you feeling the pain—like all over, or more in your forehead, temples, or the back of your head?"
+        },
+        {
+          "turn": 2,
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "followup",
+          "message": "Does the headache feel more dull and achy, or is it sharp, throbbing, or pressure-like?"
+        }
+      ]
+    },
+    {
+      "id": "TC002",
+      "turns": [
+        "I have a runny nose, sneezing and a mild sore throat for two days.",
+        "No, nothing else. No other symptoms and no medical conditions."
+      ],
+      "expected_triage": [
+        "SELF_CARE"
+      ],
+      "expected_language": "English",
+      "final_triage": "SEE_DOCTOR",
+      "final_language": "English",
+      "triage_match": false,
+      "language_match": true,
+      "triage_direction": "too_high",
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "input": "I have a runny nose, sneezing and a mild sore throat for two days.",
+          "type": "followup",
+          "message": "Have you developed any other symptoms like a fever, body aches, or a cough along with your runny nose and sore throat?"
+        },
+        {
+          "turn": 2,
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "answer",
+          "message": "⚠️ Some of your symptoms are serious. Please see a doctor soon or go to an emergency room if symptoms are severe.\n\nIt sounds like you most likely have a common cold [1]. \n\nYour runny nose, sneezing, a"
+        }
+      ]
+    },
+    {
+      "id": "TC003",
+      "turns": [
+        "I have a mild stomach ache after eating lunch today.",
+        "No, nothing else. No other symptoms and no medical conditions."
+      ],
+      "expected_triage": [
+        "SELF_CARE",
+        "SEE_DOCTOR"
+      ],
+      "expected_language": "English",
+      "final_triage": null,
+      "final_language": "English",
+      "triage_match": false,
+      "language_match": true,
+      "triage_direction": "error",
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "input": "I have a mild stomach ache after eating lunch today.",
+          "type": "followup",
+          "message": "Can you describe what the stomach ache feels like — is it sharp, dull, cramping, or burning?"
+        },
+        {
+          "turn": 2,
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "followup",
+          "message": "Does the discomfort stay right in one spot, or does it seem to spread anywhere else?"
+        }
+      ]
+    },
+    {
+      "id": "TC004",
+      "turns": [
+        "I have mild lower back pain after exercising yesterday.",
+        "No, nothing else. No other symptoms and no medical conditions."
+      ],
+      "expected_triage": [
+        "SELF_CARE",
+        "SEE_DOCTOR"
+      ],
+      "expected_language": "English",
+      "final_triage": null,
+      "final_language": "English",
+      "triage_match": false,
+      "language_match": true,
+      "triage_direction": "error",
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "input": "I have mild lower back pain after exercising yesterday.",
+          "type": "followup",
+          "message": "What specific exercises or movements were you doing yesterday before your back started hurting?"
+        },
+        {
+          "turn": 2,
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "followup",
+          "message": "Does the pain stay right in your lower back, or does it travel down into your legs or buttocks?"
+        }
+      ]
+    },
+    {
+      "id": "TC005",
+      "turns": [
+        "I have a mild fever of 99.5 F since last night.",
+        "No, nothing else. No other symptoms and no medical conditions.",
+        "No cough or breathing problems."
+      ],
+      "expected_triage": [
+        "SELF_CARE"
+      ],
+      "expected_language": "English",
+      "final_triage": "SEE_DOCTOR",
+      "final_language": "English",
+      "triage_match": false,
+      "language_match": true,
+      "triage_direction": "too_high",
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "input": "I have a mild fever of 99.5 F since last night.",
+          "type": "followup",
+          "message": "Are you experiencing any other symptoms along with the fever, such as chills, a cough, or body aches?"
+        },
+        {
+          "turn": 2,
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "answer",
+          "message": "You are experiencing a mild fever of unknown origin that began last night at 99.5°F without any other symptoms. Because there are no other complaints, the exact cause is unclear. For now, rest at home"
+        }
+      ]
+    },
+    {
+      "id": "TC006",
+      "turns": [
+        "I have been constipated for three days.",
+        "No, nothing else. No other symptoms and no medical conditions."
+      ],
+      "expected_triage": [
+        "SELF_CARE",
+        "SEE_DOCTOR"
+      ],
+      "expected_language": "English",
+      "final_triage": null,
+      "final_language": "English",
+      "triage_match": false,
+      "language_match": true,
+      "triage_direction": "error",
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "input": "I have been constipated for three days.",
+          "type": "followup",
+          "message": "Are you experiencing any other symptoms along with the constipation, such as abdominal pain, cramping, or bloating?"
+        },
+        {
+          "turn": 2,
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "followup",
+          "message": "Have you made any recent changes to your diet, fluid intake, or daily routine around the time this started?"
+        }
+      ]
+    },
+    {
+      "id": "TC007",
+      "turns": [
+        "I have a small mild itchy skin rash on my forearm since yesterday.",
+        "No, nothing else. No other symptoms and no medical conditions."
+      ],
+      "expected_triage": [
+        "SELF_CARE",
+        "SEE_DOCTOR"
+      ],
+      "expected_language": "English",
+      "final_triage": null,
+      "final_language": "English",
+      "triage_match": false,
+      "language_match": true,
+      "triage_direction": "error",
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "input": "I have a small mild itchy skin rash on my forearm since yesterday.",
+          "type": "followup",
+          "message": "Did you happen to come into contact with any new soaps, plants, chemicals, or animals just before the rash appeared?"
+        },
+        {
+          "turn": 2,
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "followup",
+          "message": "Does the rash seem to be spreading anywhere else, or has it changed in appearance since yesterday?"
+        }
+      ]
+    },
+    {
+      "id": "TC008",
+      "turns": [
+        "I have a dry cough for three days.",
+        "No, nothing else. No other symptoms and no medical conditions.",
+        "No fever and no breathlessness."
+      ],
+      "expected_triage": [
+        "SELF_CARE"
+      ],
+      "expected_language": "English",
+      "final_triage": null,
+      "final_language": "English",
+      "triage_match": false,
+      "language_match": true,
+      "triage_direction": "error",
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "input": "I have a dry cough for three days.",
+          "type": "followup",
+          "message": "Are you experiencing any other symptoms along with the dry cough, such as a fever, shortness of breath, or a sore throat?"
+        },
+        {
+          "turn": 2,
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "followup",
+          "message": "Is the cough constant throughout the day, or does it tend to come and go in bouts?"
+        },
+        {
+          "turn": 3,
+          "input": "No fever and no breathlessness.",
+          "type": "followup",
+          "message": "Does anything specific seem to trigger the cough, such as dust, cold air, or lying down at night?"
+        }
+      ]
+    },
+    {
+      "id": "TC009",
+      "turns": [
+        "I get acidity and heartburn after meals almost every day this week.",
+        "No, nothing else. No other symptoms and no medical conditions."
+      ],
+      "expected_triage": [
+        "SEE_DOCTOR"
+      ],
+      "expected_language": "English",
+      "final_triage": null,
+      "final_language": "English",
+      "triage_match": false,
+      "language_match": true,
+      "triage_direction": "error",
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "input": "I get acidity and heartburn after meals almost every day this week.",
+          "type": "followup",
+          "message": "Does anything specific seem to trigger the heartburn or make it worse, such as certain types of food, bending over, or lying down right after eating?"
+        },
+        {
+          "turn": 2,
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "followup",
+          "message": "Have you tried taking any over-the-counter medications or remedies for the heartburn, and do they help?"
+        }
+      ]
+    },
+    {
+      "id": "TC010",
+      "turns": [
+        "My eyes feel strained and tired after long hours on the computer screen.",
+        "No, nothing else. No other symptoms and no medical conditions."
+      ],
+      "expected_triage": [
+        "SELF_CARE"
+      ],
+      "expected_language": "English",
+      "final_triage": null,
+      "final_language": "English",
+      "triage_match": false,
+      "language_match": true,
+      "triage_direction": "error",
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "input": "My eyes feel strained and tired after long hours on the computer screen.",
+          "type": "followup",
+          "message": "Do you notice any other symptoms when your eyes feel strained, such as headaches, dryness, or blurry vision?"
+        },
+        {
+          "turn": 2,
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "followup",
+          "message": "Does resting your eyes or stepping away from the screen help make the strain better?"
+        }
+      ]
+    },
+    {
+      "id": "TC011",
+      "turns": [
+        "I got a muscle cramp in my calf last night, it is fine now.",
+        "No, nothing else. No other symptoms and no medical conditions."
+      ],
+      "expected_triage": [
+        "SELF_CARE"
+      ],
+      "expected_language": "English",
+      "final_triage": "SELF_CARE",
+      "final_language": "English",
+      "triage_match": true,
+      "language_match": true,
+      "triage_direction": "correct",
+      "error": null,
+      "responses": [
+        {
+          "turn": 1,
+          "input": "I got a muscle cramp in my calf last night, it is fine now.",
+          "type": "followup",
+          "message": "Were you doing any unusual physical activity, heavy lifting, or strenuous exercise right before the cramp started?"
+        },
+        {
+          "turn": 2,
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "answer",
+          "message": "It sounds like you most likely had a common leg cramp [1]. \n\nThe sudden tightening in your calf muscle last night points to this harmless spasm [1]. \n\nMost cramps happen at night and go away on their "
+        }
+      ]
+    },
+    {
+      "id": "TC012",
+      "turns": [
+        "I feel mildly anxious before my exam next week.",
+        "No, nothing else. No other symptoms and no medical conditions.",
+        "Sleeping and eating are normal. I do not feel unsafe."
+      ],
+      "expected_triage": [
+        "SELF_CARE",
+        "SEE_DOCTOR"
+      ],
+      "expected_language": "English",
+      "final_triage": null,
+      "final_language": null,
+      "triage_match": false,
+      "language_match": false,
+      "triage_direction": "error",
+      "error": "service_unavailable",
+      "responses": [
+        {
+          "turn": 1,
+          "input": "I feel mildly anxious before my exam next week.",
+          "type": "followup",
+          "message": "Are you noticing any physical symptoms when you feel this anxiety, such as a racing heart, trouble sleeping, or stomach upset?"
+        },
+        {
+          "turn": 2,
+          "input": "No, nothing else. No other symptoms and no medical conditions.",
+          "type": "service_unavailable",
+          "message": "I apologize, but I cannot assess your symptoms right now because our clinical assessment services are temporarily unavailable.\n\nEMERGENCY GUIDANCE:\nIf you are experiencing any of the following emergen"
+        }
+      ]
+    }
+  ]
+}

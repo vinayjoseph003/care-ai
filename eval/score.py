@@ -2,14 +2,13 @@
 eval/score.py — Standalone metrics calculator for Care-AI evaluation results.
 
 Computes metrics exclusively from eval/results_current.json:
-  - n (total cases)
-  - errors count
-  - triage accuracy with Wilson 95% confidence interval
-  - recall on EMERGENCY cases
-  - under-triage and over-triage counts with case IDs
-  - language accuracy per language
-  - per-class precision, recall, and F1 only for classes with support >= 5
-A failed or errored case counts as incorrect.
+  - Total cases, completed cases, provider-error cases, not_run cases
+  - Triage accuracy with Wilson 95% CI (completed cases only; no triage after drain turns counts as incorrect)
+  - Recall on EMERGENCY cases (completed emergency cases)
+  - Under-triage and over-triage counts with case IDs (completed cases)
+  - Language accuracy per language (completed cases)
+  - Per-class precision, recall, F1 only for classes with support >= 5 (completed cases)
+  - Provider breakdown (how many cases each provider answered)
 """
 
 import os
@@ -24,8 +23,7 @@ def wilson_score_interval(k: int, n: int, confidence: float = 0.95):
     if n == 0:
         return 0.0, 0.0, 0.0
     p = k / n
-    # z for 95% two-sided confidence
-    z = 1.959963984540054
+    z = 1.959963984540054  # 95% two-sided
     z2 = z * z
     denom = 1.0 + z2 / n
     center = (p + z2 / (2 * n)) / denom
@@ -44,38 +42,65 @@ def score_results(results_path: str):
         data = json.load(f)
 
     cases = data.get("cases", [])
-    provider = data.get("provider", "unknown")
-    model = data.get("model", "unknown")
     date_str = data.get("date", "unknown")
     commit_str = data.get("commit", "unknown")
 
-    n = len(cases)
-    if n == 0:
+    total_n = len(cases)
+    if total_n == 0:
         print("No cases found in results file.")
         return
 
-    # Counts
-    errors = []
+    # Categorize cases
+    completed_cases = []
+    provider_error_cases = []
+    not_run_cases = []
+
+    for c in cases:
+        status = c.get("status")
+        # If status is explicit
+        if status == "not_run":
+            not_run_cases.append(c)
+        elif status == "provider_error":
+            provider_error_cases.append(c)
+        elif status == "completed":
+            completed_cases.append(c)
+        else:
+            # Fallback categorization if status not set
+            if c.get("error") and "rate limit" in str(c.get("error")).lower():
+                not_run_cases.append(c)
+            elif c.get("error"):
+                provider_error_cases.append(c)
+            else:
+                completed_cases.append(c)
+
+    n_comp = len(completed_cases)
+    n_err = len(provider_error_cases)
+    n_not_run = len(not_run_cases)
+
+    # Provider breakdown
+    provider_counts = defaultdict(int)
+    for c in completed_cases:
+        p = c.get("provider_used") or "unknown"
+        provider_counts[p] += 1
+
+    # Metrics on completed cases ONLY
     triage_correct_count = 0
     under_triage_ids = []
     over_triage_ids = []
+    no_triage_ids = []
 
-    # Emergency recall tracking
     emergency_cases = []
     emergency_tp = 0
 
-    # Language tracking: {lang: {"total": int, "correct": int}}
     lang_stats = defaultdict(lambda: {"total": 0, "correct": 0})
 
-    # Class-level tracking for precision/recall/F1
-    # classes: SELF_CARE, SEE_DOCTOR, URGENT_CARE, EMERGENCY
     classes = ["SELF_CARE", "SEE_DOCTOR", "URGENT_CARE", "EMERGENCY"]
     class_tp = defaultdict(int)
     class_fp = defaultdict(int)
     class_fn = defaultdict(int)
     class_support = defaultdict(int)
 
-    for c in cases:
+    for c in completed_cases:
         cid = c.get("id", "")
         exp_triage = c.get("expected_triage", [])
         if isinstance(exp_triage, str):
@@ -83,18 +108,16 @@ def score_results(results_path: str):
         act_triage = c.get("final_triage")
         exp_lang = c.get("expected_language", "English")
         act_lang = c.get("final_language", "")
-        err = c.get("error")
         tdir = c.get("triage_direction", "")
 
-        # Errors
-        if err or not act_triage:
-            errors.append((cid, err or "No triage output"))
+        # A case that finishes with no triage after drain turns counts as incorrect
+        if not act_triage:
+            no_triage_ids.append(cid)
 
-        # Triage accuracy (errored cases count as incorrect)
-        if not err and act_triage and (act_triage in exp_triage):
+        is_correct = bool(act_triage and (act_triage in exp_triage))
+        if is_correct:
             triage_correct_count += 1
 
-        # Under-triage / over-triage
         if tdir == "too_low":
             under_triage_ids.append(cid)
         elif tdir == "too_high":
@@ -103,62 +126,63 @@ def score_results(results_path: str):
         # Emergency recall
         if "EMERGENCY" in exp_triage:
             emergency_cases.append(cid)
-            if not err and act_triage == "EMERGENCY":
+            if act_triage == "EMERGENCY":
                 emergency_tp += 1
 
         # Language tracking
         lang_stats[exp_lang]["total"] += 1
-        if not err and act_lang and (act_lang.lower() == exp_lang.lower()):
+        if act_lang and (act_lang.lower() == exp_lang.lower()):
             lang_stats[exp_lang]["correct"] += 1
 
-        # Per-class P/R/F1 accounting
-        # Support is counted if class is in expected_triage
+        # Per-class accounting
         for cls in classes:
             if cls in exp_triage:
                 class_support[cls] += 1
 
-        if not err and act_triage in classes:
+        if act_triage in classes:
             if act_triage in exp_triage:
                 class_tp[act_triage] += 1
             else:
                 class_fp[act_triage] += 1
 
-        # False negative: case expected this class, but output was not in expected_triage
         for cls in exp_triage:
             if cls in classes:
-                if err or act_triage not in exp_triage:
+                if not act_triage or act_triage not in exp_triage:
                     class_fn[cls] += 1
 
-    # Triage accuracy Wilson CI
-    p_acc, ci_low, ci_high = wilson_score_interval(triage_correct_count, n)
-
-    # Output formatted report
-    print("=" * 65)
-    print("  CARE-AI CURRENT EVALUATION REPORT")
-    print("=" * 65)
-    print(f"Date          : {date_str}")
-    print(f"Commit        : {commit_str}")
-    print(f"Provider/Model: {provider} ({model})")
-    print(f"Total Cases (n): {n}")
-    print(f"Errors        : {len(errors)}" + (f" {errors}" if errors else ""))
-    print("-" * 65)
-    print(f"Triage Accuracy: {triage_correct_count}/{n} ({p_acc * 100:.1f}%)")
-    print(f"Wilson 95% CI  : [{ci_low * 100:.1f}%, {ci_high * 100:.1f}%]")
-    print("-" * 65)
-
+    p_acc, ci_low, ci_high = wilson_score_interval(triage_correct_count, n_comp)
     em_recall = (emergency_tp / len(emergency_cases)) if emergency_cases else 0.0
-    print(f"Emergency Recall: {emergency_tp}/{len(emergency_cases)} ({em_recall * 100:.1f}%)")
-    print(f"Under-triage Count: {len(under_triage_ids)} cases -> {under_triage_ids}")
-    print(f"Over-triage Count : {len(over_triage_ids)} cases -> {over_triage_ids}")
-    print("-" * 65)
 
+    # Print Formatted Report
+    print("=" * 68)
+    print("  CARE-AI EVALUATION METRICS REPORT")
+    print("=" * 68)
+    print(f"Date                 : {date_str}")
+    print(f"Commit               : {commit_str}")
+    print(f"Total Cases Defined  : {total_n}")
+    print(f"Completed Cases (n)  : {n_comp}")
+    print(f"Provider Error Cases : {n_err} -> {[c.get('id') for c in provider_error_cases]}")
+    print(f"Not Run Cases        : {n_not_run} -> {[c.get('id') for c in not_run_cases]}")
+    print("-" * 68)
+    print("Provider Distribution (Completed Cases):")
+    for p, count in sorted(provider_counts.items()):
+        print(f"  - {p:<25}: {count} cases")
+    print("-" * 68)
+    print(f"Triage Accuracy      : {triage_correct_count}/{n_comp} ({p_acc * 100:.1f}%)")
+    print(f"Wilson 95% CI        : [{ci_low * 100:.1f}%, {ci_high * 100:.1f}%]")
+    if no_triage_ids:
+        print(f"No Triage After Drain: {len(no_triage_ids)} cases (counted incorrect) -> {no_triage_ids}")
+    print("-" * 68)
+    print(f"Emergency Recall     : {emergency_tp}/{len(emergency_cases)} ({em_recall * 100:.1f}%) [Support: {len(emergency_cases)}]")
+    print(f"Under-triage Count   : {len(under_triage_ids)} cases -> {under_triage_ids}")
+    print(f"Over-triage Count    : {len(over_triage_ids)} cases -> {over_triage_ids}")
+    print("-" * 68)
     print("Language Accuracy by Language:")
     for lang, s in sorted(lang_stats.items()):
         l_acc = (s["correct"] / s["total"] * 100) if s["total"] > 0 else 0.0
-        print(f"  • {lang:10s}: {s['correct']}/{s['total']} ({l_acc:.1f}%)")
-    print("-" * 65)
-
-    print("Per-Class Metrics (Classes with Support >= 5 only):")
+        print(f"  - {lang:10s}: {s['correct']}/{s['total']} ({l_acc:.1f}%)")
+    print("-" * 68)
+    print("Per-Class Metrics (Support >= 5 only):")
     print(f"{'Class':<14} {'Support':<9} {'Precision':<11} {'Recall':<10} {'F1-Score':<10}")
     print("-" * 54)
     for cls in classes:
@@ -173,7 +197,7 @@ def score_results(results_path: str):
             print(f"{cls:<14} {sup:<9} {prec * 100:>6.1f}%    {rec * 100:>6.1f}%   {f1:>7.3f}")
         else:
             print(f"{cls:<14} {sup:<9} (excluded: support < 5)")
-    print("=" * 65)
+    print("=" * 68)
 
 
 if __name__ == "__main__":
