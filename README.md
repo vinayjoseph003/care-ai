@@ -16,7 +16,7 @@
   <a href="https://github.com/vinayjoseph003/care-ai"><strong>GitHub Repository</strong></a> •
   <a href="#quick-start"><strong>Quick Start</strong></a> •
   <a href="#system-architecture"><strong>Architecture</strong></a> •
-  <a href="#empirical-evaluation"><strong>Evaluation</strong></a>
+  <a href="#evaluation"><strong>Evaluation</strong></a>
 </p>
 
 </div>
@@ -82,12 +82,12 @@ The hosted demonstration of Care-AI is accessible on Streamlit Community Cloud:
 
 ## Core Features
 
-| Feature | Technical Implementation | Verified Capability |
+| Feature | Technical Implementation | Capability |
 |---|---|---|
 | **Multilingual Interaction** | Language identification pass with strict cross-prompt target-language constraints | Automatically recognizes input languages (English, Telugu, Hindi, and others) and maintains consistent target-language output across all triage passes. |
 | **Sparse Vector RAG** | SciPy CSR sparse TF-IDF index over 37,233 chunks with category blocklists and query routing | Performs sparse vector retrieval across 5 authoritative medical sources, enforcing relevance filtering (`RELEVANCE_THRESHOLD = 0.10`). |
 | **Explainable AI (XAI)** | Dual-pass structured generation: *Cause → Reasoning → Recommendation* | Grounds each response in referenced literature (`MedQuAD`, `MedlinePlus`, `ICD-10-CM`, `NHS`), displaying explicit source provenance for transparent inspection. |
-| **Four-Tier Symptom Triage** | Weighted mathematical severity aggregation + differential LLM consensus | Stratifies risk into `SELF_CARE`, `SEE_DOCTOR`, `URGENT_CARE`, or `EMERGENCY`. Implements deterministic red-flag escalation and conservative triage floors to minimize under-triage risk for emergency presentations. |
+| **Four-Tier Symptom Triage** | Weighted mathematical severity aggregation + differential LLM consensus | Stratifies risk into `SELF_CARE`, `SEE_DOCTOR`, `URGENT_CARE`, or `EMERGENCY`. Implements deterministic red-flag escalation and conservative triage floors designed to reduce under-triage risk for emergency presentations. |
 | **SOCRATES Intake Engine** | Confidence-threshold conversational state machine (`ConvState`) | Replaces rigid turn limits with adaptive follow-up questions; stops when sufficient clinical detail is collected or when vague user input is identified. |
 | **Doctor & Specialist Finder** | Geolocation + OpenStreetMap (Nominatim/Overpass) specialist mapping | Automatically recommends relevant medical specialties (e.g., Cardiologist, Pulmonologist, Neurologist) and queries nearby medical facilities. |
 | **Multi-Provider LLM Router** | Sticky priority router across Gemini, OpenRouter, Groq, and local Ollama | Bounded timeouts, non-blocking failover on 429/503 errors, safe response parsing, and native Server-Sent Events (SSE) token streaming. |
@@ -222,7 +222,7 @@ The Care-AI codebase has undergone extensive structural and operational hardenin
 
 ## Evaluation
 
-Test inputs reconstructed from case descriptions; author-written; expected labels author-assigned; not clinician-reviewed; 30 cases. Scripted turns were executed with the conversational intake engine. If no triage assessment was produced after scripted turns ended, the fixed harness reply `"No, that is all I can tell you."` was sent up to 3 times to allow the model to reach a final assessment. Cases finishing without a triage assessment after drain turns count as incorrect. Runs were executed in prioritized order with emergency/red-flag cases first (`TC016`–`TC030`), followed by remaining cases (`TC001`–`TC015`), with automatic provider fallback enabled across Gemini and OpenRouter. These results do not claim to match any earlier test run.
+Test inputs reconstructed from case descriptions; author-written; expected labels author-assigned; not clinician-reviewed; 30 cases. Scripted turns were executed with the conversational intake engine. If no triage assessment was produced after scripted turns ended, the fixed harness reply `"No, that is all I can tell you."` was sent up to 3 times to allow the model to reach a final assessment. Cases finishing without a triage assessment after drain turns count as incorrect. Runs were executed in prioritized order with emergency/red-flag cases first (`TC016`–`TC030`), followed by remaining cases (`TC001`–`TC015`), with automatic provider fallback enabled across Gemini, OpenRouter and Groq.
 
 All 30 of 30 test cases completed evaluation without provider exhaustion.
 
@@ -234,7 +234,7 @@ All 30 of 30 test cases completed evaluation without provider exhaustion.
 | **Commit** | `908473f` | Branch `main` |
 | **Providers Used** | Gemini (15), OpenRouter (11), Deterministic Red-Flag (4) | Multi-provider fallback chain |
 | **Completed Cases (n)** | 30 / 30 | 30 completed cases; 0 provider error; 0 not run |
-| **Drain Turns Used** | 10 turns across 6 cases | Fixed response sent when turns exhausted |
+| **Drain Turns Used** | 26 turns across 18 cases | Fixed response sent when turns exhausted |
 | **Triage Accuracy** | 24 / 30 (80.0%) | Wilson 95% CI: [62.7%, 90.5%] |
 | **Emergency Recall** | 11 / 14 (78.6%) | Positive emergency support: 14 |
 | **Under-Triage Count** | 3 cases | Case IDs: `TC017`, `TC022`, `TC030` |
@@ -256,6 +256,7 @@ Only reported for classes with support $\ge$ 5:
 ### Limitations
 - **Author-Authored Benchmark**: Test inputs and expected labels were reconstructed from case descriptions by the author and are not clinician-reviewed.
 - **Not Clinically Validated**: Care-AI has not undergone clinical validation, medical trials, or regulatory clearance.
+- **Under-triage**: 3 of 14 emergency-labelled cases (TC017 sudden severe headache, TC022 dizziness with loss of balance, TC030 jaw pain with sweating) were not escalated to EMERGENCY. Do not rely on Care-AI to detect every emergency; seek urgent care for severe symptoms.
 
 ---
 
@@ -377,7 +378,7 @@ When running the interactive terminal interface (`python main.py`), you can ente
 
 ## Verification & Automated Testing
 
-The Care-AI repository contains a test suite of **28 automated test cases** organized across three phase-specific verification modules:
+The Care-AI repository contains a test suite of **242 offline unit tests (plus live integration tests in the phase modules)** organized across three phase-specific verification modules:
 
 ```bash
 python -m unittest discover tests -v
